@@ -103,39 +103,39 @@ body, html {
   color: #fff;
 }
 
-/* --- PANEL DERECHO (ESPECIFICACIONES) --- */
+/* --- PANEL DERECHO (Optimizado para móviles) --- */
 .carrusel-vertical {
   position: absolute;
-  top: 20px;
-  right: 20px;
+  top: 15px;
+  right: 15px;
   z-index: 10;
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  width: 240px;
-  max-height: 85vh;
+  gap: 6px;
+  width: auto;
+  max-width: 190px;
 }
 
 .panel-admin {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  background: rgba(16, 185, 129, 0.15);
+  gap: 4px;
+  background: rgba(16, 185, 129, 0.2);
   border: 1px dashed rgba(16, 185, 129, 0.5);
-  padding: 10px;
-  border-radius: 12px;
+  padding: 6px;
+  border-radius: 10px;
 }
 
 .btn-agregar-vista {
   background: #10b981;
   color: #fff;
   border: none;
-  padding: 8px 12px;
-  border-radius: 8px;
+  padding: 6px 8px;
+  border-radius: 6px;
   cursor: pointer;
   font-weight: 600;
-  font-size: 0.8rem;
-  transition: background 0.2s;
+  font-size: 0.75rem;
+  white-space: nowrap;
 }
 
 .btn-agregar-vista:hover {
@@ -146,33 +146,33 @@ body, html {
   background: rgba(255, 255, 255, 0.1);
   color: #f8fafc;
   border: 1px solid rgba(255, 255, 255, 0.2);
-  padding: 6px 10px;
-  border-radius: 8px;
+  padding: 4px 6px;
+  border-radius: 6px;
+  font-size: 0.7rem;
   cursor: pointer;
-  font-size: 0.75rem;
 }
 
 .titulo-carrusel {
   color: #94a3b8;
-  font-size: 0.75rem;
+  font-size: 0.65rem;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  padding-left: 4px;
+  padding-left: 2px;
 }
 
 .lista-vistas {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  background: rgba(15, 23, 42, 0.8);
+  gap: 6px;
+  background: rgba(15, 23, 42, 0.85);
   backdrop-filter: blur(12px);
-  padding: 12px;
-  border-radius: 16px;
+  padding: 8px;
+  border-radius: 12px;
   border: 1px solid rgba(255, 255, 255, 0.15);
   box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
   overflow-y: auto;
-  max-height: 60vh;
+  max-height: 45vh;
 }
 
 .btn-vista-item {
@@ -182,28 +182,27 @@ body, html {
   background: rgba(255, 255, 255, 0.05);
   color: #f8fafc;
   border: 1px solid rgba(255, 255, 255, 0.1);
-  padding: 10px 12px;
-  border-radius: 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
   cursor: pointer;
-  font-size: 0.85rem;
+  font-size: 0.75rem;
   font-weight: 500;
+  white-space: nowrap;
   transition: all 0.2s ease-in-out;
 }
 
 .btn-vista-item:hover {
   background: rgba(59, 130, 246, 0.3);
   border-color: #3b82f6;
-  transform: translateX(-2px);
 }
 
 .btn-borrar-item {
   background: transparent;
   border: none;
   color: #f87171;
-  font-size: 0.8rem;
+  font-size: 0.75rem;
   cursor: pointer;
-  padding: 2px 6px;
-  border-radius: 4px;
+  padding: 2px 4px;
   opacity: 0.6;
 }
 

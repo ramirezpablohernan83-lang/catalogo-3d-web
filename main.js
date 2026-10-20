@@ -6,7 +6,7 @@ import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
 // ==========================================
 // CONFIGURACIÓN DE MODO
 // true  = Muestra botones de grabación/edición para el Administrador
-// false = Modo público/Cliente (sólo lectura de las vistas predefinidas)
+// false = Modo público/Cliente (sólo lectura de vistas predefinidas)
 const MODO_ADMINISTRADOR = true; 
 // ==========================================
 
@@ -32,7 +32,7 @@ const dirLight = new THREE.DirectionalLight(0xffffff, 1.2);
 dirLight.position.set(5, 10, 7);
 scene.add(dirLight);
 
-// 2. HDRI ENTORNO Y FONDO
+// 2. ENTORNO Y FONDO HDRI
 const rgbeLoader = new RGBELoader();
 rgbeLoader.load('/assets/hdri.hdr', (texture) => {
   texture.mapping = THREE.EquirectangularReflectionMapping;
@@ -43,7 +43,7 @@ rgbeLoader.load('/assets/hdri.hdr', (texture) => {
   console.warn("⚠️ No se pudo cargar el HDRI:", error);
 });
 
-// 3. ORBITCONTROLS
+// 3. ORBITCONTROLS CON LIBERTAD DE ROTACIÓN
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
 controls.dampingFactor = 0.05;
@@ -81,17 +81,17 @@ toggleSidebarBtn.addEventListener('click', () => {
   sidebar.classList.toggle('collapsed');
 });
 
-// 6. VISTAS PREDEFINIDAS PARA EL CLIENTE (Si no hay nada en memoria, carga estas por defecto)
+// 6. VISTAS TÉCNICAS (DEFAULT PARA EL CLIENTE)
 const VISTAS_DEFAULT = [
   { nombre: "Vista General", px: 0, py: 3, pz: 6, tx: 0, ty: 0, tz: 0 },
-  { nombre: "Agujero Central (Manzana)", px: 0, py: 4, pz: 0.1, tx: 0, ty: 0, tz: 0 },
-  { nombre: "Agujeros de Fijación (PCD)", px: 1.2, py: 2.5, pz: 2, tx: 0.3, ty: 0, tz: 0 },
-  { nombre: "Cama de Llanta / Caucho", px: 4.5, py: 0.5, pz: 0, tx: 0, ty: 0, tz: 0 }
+  { nombre: "Agujero Central", px: 0, py: 4, pz: 0.1, tx: 0, ty: 0, tz: 0 },
+  { nombre: "Apernadura (PCD)", px: 1.2, py: 2.5, pz: 2, tx: 0.3, ty: 0, tz: 0 },
+  { nombre: "Cama de Caucho", px: 4.5, py: 0.5, pz: 0, tx: 0, ty: 0, tz: 0 }
 ];
 
 let listaVistas = JSON.parse(localStorage.getItem('catalogo3d_vistas_rueda')) || VISTAS_DEFAULT;
 
-// Control visual del modo Admin vs Cliente
+// Control visual de Modo Admin vs Cliente
 const panelAdmin = document.getElementById('panel-admin');
 if (MODO_ADMINISTRADOR && panelAdmin) {
   panelAdmin.style.display = 'flex';
@@ -102,7 +102,7 @@ function renderizarBotonesVistas() {
   contenedor.innerHTML = '';
 
   if (listaVistas.length === 0) {
-    contenedor.innerHTML = `<div style="color: #94a3b8; font-size: 0.75rem; text-align: center; padding: 8px;">Sin cotas o puntos cargados</div>`;
+    contenedor.innerHTML = `<div style="color: #94a3b8; font-size: 0.65rem; text-align: center; padding: 6px;">Sin puntos cargados</div>`;
     return;
   }
 
@@ -111,13 +111,12 @@ function renderizarBotonesVistas() {
     div.className = 'btn-vista-item';
     div.onclick = () => aplicarVista(index);
 
-    // Si está en Modo Admin muestra el botón '✕' para borrar
     const botonBorrar = MODO_ADMINISTRADOR 
-      ? `<button class="btn-borrar-item" onclick="borrarVista(event, ${index})" title="Eliminar cota">✕</button>` 
+      ? `<button class="btn-borrar-item" onclick="borrarVista(event, ${index})" title="Eliminar">✕</button>` 
       : '';
 
     div.innerHTML = `
-      <span>🔩 ${vista.nombre}</span>
+      <span>📍 ${vista.nombre}</span>
       ${botonBorrar}
     `;
     
@@ -127,7 +126,7 @@ function renderizarBotonesVistas() {
 
 // FUNCIONES DE ADMINISTRACIÓN
 window.guardarVistaActual = function() {
-  const nombreVista = prompt("Nombre de la cota/punto (ej: Diámetro Agujero Central, Distancia entre Agujeros, etc.):");
+  const nombreVista = prompt("Nombre de la cota o punto técnico:", `Punto ${listaVistas.length + 1}`);
   if (!nombreVista || nombreVista.trim() === "") return;
 
   const nuevaVista = {
@@ -146,9 +145,9 @@ window.guardarVistaActual = function() {
 };
 
 window.exportarConfiguracionJSON = function() {
-  console.log("📋 COPIA ESTE ARRAY EN TU CÓDIGO (VISTAS_DEFAULT):");
+  console.log("📋 COPIA ESTE ARRAY EN VISTAS_DEFAULT:");
   console.log(JSON.stringify(listaVistas, null, 2));
-  alert("Las coordenadas se imprimieron en la consola (F12). Puedes copiarlas para dejarlas fijas en el código de producción.");
+  alert("Las coordenadas se imprimieron en la consola (F12).");
 };
 
 window.borrarVista = function(event, index) {
@@ -158,7 +157,7 @@ window.borrarVista = function(event, index) {
   renderizarBotonesVistas();
 };
 
-// APLICAR COTA AL CLIENTE
+// APLICAR VISTA (Mantiene total libertad de rotación al usuario)
 window.aplicarVista = function(index) {
   const v = listaVistas[index];
   if (!v) return;

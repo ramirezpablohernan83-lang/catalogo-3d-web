@@ -11,7 +11,7 @@
   <!-- Visor 3D -->
   <div id="webgl-container"></div>
 
-  <!-- MENÚ LATERAL IZQUIERDO (Modelos de Llantas) -->
+  <!-- MENÚ LATERAL IZQUIERDO (Modelos) -->
   <div id="sidebar" class="sidebar">
     <div class="sidebar-header">
       <h2 class="sidebar-title">Modelos Llantas</h2>
@@ -24,17 +24,17 @@
     </div>
   </div>
 
-  <!-- PANEL DERECHO DE ENFOQUES TÉCNICOS -->
+  <!-- PANEL DERECHO (Optimizado y compacto para móviles) -->
   <div class="carrusel-vertical">
-    <!-- Panel del Administrador (Se oculta automáticamente en modo Cliente) -->
+    <!-- Panel del Administrador (Se oculta en modo Cliente) -->
     <div id="panel-admin" class="panel-admin" style="display: none;">
-      <button class="btn-agregar-vista" onclick="guardarVistaActual()">➕ Grabar Vista Actual</button>
-      <button class="btn-exportar-json" onclick="exportarConfiguracionJSON()">💾 Exportar Configuración</button>
+      <button class="btn-agregar-vista" onclick="guardarVistaActual()">➕ Grabar Vista</button>
+      <button class="btn-exportar-json" onclick="exportarConfiguracionJSON()">💾 Exportar</button>
     </div>
 
-    <div class="titulo-carrusel">Especificaciones Técnicas</div>
+    <div class="titulo-carrusel">Especificaciones</div>
     
-    <!-- Lista donde se cargarán los botones de inspección -->
+    <!-- Lista donde se cargan los botones de inspección -->
     <div id="lista-vistas-dinamica" class="lista-vistas"></div>
   </div>
 
