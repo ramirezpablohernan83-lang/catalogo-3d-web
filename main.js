@@ -1,200 +1,198 @@
 import * as THREE from 'three';
-import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { RGBELoader } from 'three/addons/loaders/RGBELoader.js';
+import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
 
-// ========== CONFIGURACIÓN ==========
-const HDRI_PATH = './assets/hdri.hdr';   // ← ajusta si el nombre es distinto
-const MODELS = {
-  'modelo1.glb': './assets/modelo1.glb',
-  'modelo2.glb': './assets/modelo2.glb',
-  'modelo3.glb': './assets/modelo3.glb'
-};
+// ==========================================
+// CONFIGURACIÓN DE MODO
+// true  = Muestra botones de grabación/edición para el Administrador
+// false = Modo público/Cliente (sólo lectura de las vistas predefinidas)
+const MODO_ADMINISTRADOR = true; 
+// ==========================================
 
-// ========== ESCENA ==========
-const container = document.getElementById('viewer');
-const loaderEl = document.getElementById('loader');
+// 1. ESCENA, CÁMARA Y RENDERER
+const container = document.querySelector('#webgl-container');
 const scene = new THREE.Scene();
 
-// Cámara
-const camera = new THREE.PerspectiveCamera(
-  45,
-  window.innerWidth / window.innerHeight,
-  0.1,
-  1000
-);
-camera.position.set(4.5, 2.2, 5.5);
+const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 100);
+camera.position.set(0, 3, 6);
 
-// Renderer
-const renderer = new THREE.WebGLRenderer({
-  antialias: true,
-  alpha: false
-});
+const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.15;
-renderer.outputColorSpace = THREE.SRGBColorSpace;
-
-// Sombras
-renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-
+renderer.toneMappingExposure = 1.0;
 container.appendChild(renderer.domElement);
 
-// Controles
+// ILUMINACIÓN
+const ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
+scene.add(ambientLight);
+
+const dirLight = new THREE.DirectionalLight(0xffffff, 1.2);
+dirLight.position.set(5, 10, 7);
+scene.add(dirLight);
+
+// 2. HDRI ENTORNO Y FONDO
+const rgbeLoader = new RGBELoader();
+rgbeLoader.load('/assets/hdri.hdr', (texture) => {
+  texture.mapping = THREE.EquirectangularReflectionMapping;
+  scene.environment = texture;
+  scene.background = texture;
+  console.log("✅ HDRI cargado correctamente.");
+}, undefined, (error) => {
+  console.warn("⚠️ No se pudo cargar el HDRI:", error);
+});
+
+// 3. ORBITCONTROLS
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
 controls.dampingFactor = 0.05;
-controls.target.set(0, 0.9, 0);
-controls.update();
+controls.minDistance = 2;
+controls.maxDistance = 12;
+controls.maxPolarAngle = Math.PI / 2 - 0.05;
+controls.minPolarAngle = 0.1;
+controls.enablePan = true;
 
-// ========== LUZ DIRECCIONAL PARA SOMBRAS ==========
-const dirLight = new THREE.DirectionalLight(0xffffff, 1.8);
-dirLight.position.set(6, 12, 8);
-dirLight.castShadow = true;
-dirLight.shadow.mapSize.set(2048, 2048);
-dirLight.shadow.camera.near = 0.5;
-dirLight.shadow.camera.far = 40;
-dirLight.shadow.camera.left = -8;
-dirLight.shadow.camera.right = 8;
-dirLight.shadow.camera.top = 8;
-dirLight.shadow.camera.bottom = -8;
-dirLight.shadow.bias = -0.0005;
-scene.add(dirLight);
+// 4. CARGA DE MODELO 3D
+let modeloActual = null;
+const loader = new GLTFLoader();
 
-// Luz ambiental suave
-const ambient = new THREE.AmbientLight(0xffffff, 0.25);
-scene.add(ambient);
-
-// ========== HDRI ==========
-const pmremGenerator = new THREE.PMREMGenerator(renderer);
-pmremGenerator.compileEquirectangularShader();
-
-new RGBELoader()
-  .setDataType(THREE.HalfFloatType)
-  .load(
-    HDRI_PATH,
-    (texture) => {
-      const envMap = pmremGenerator.fromEquirectangular(texture).texture;
-      scene.environment = envMap;
-      scene.background = envMap;
-      texture.dispose();
-      pmremGenerator.dispose();
-    },
-    undefined,
-    (err) => {
-      console.error('Error cargando HDRI:', err);
-      scene.background = new THREE.Color(0x1a1a2e);
-    }
-  );
-
-// ========== CARGA DE MODELOS ==========
-const gltfLoader = new GLTFLoader();
-let currentModel = null;
-
-function showLoader() {
-  loaderEl.classList.remove('hidden');
-}
-
-function hideLoader() {
-  loaderEl.classList.add('hidden');
-}
-
-function loadModel(filename) {
-  const path = MODELS[filename];
-  if (!path) return;
-
-  showLoader();
-
-  // Eliminar modelo anterior y liberar memoria
-  if (currentModel) {
-    scene.remove(currentModel);
-    currentModel.traverse((child) => {
-      if (child.isMesh) {
-        child.geometry?.dispose();
-        if (Array.isArray(child.material)) {
-          child.material.forEach((m) => m.dispose());
-        } else {
-          child.material?.dispose();
-        }
-      }
-    });
-    currentModel = null;
+function cargarModelo(pathArchivo) {
+  if (modeloActual) {
+    scene.remove(modeloActual);
   }
 
-  gltfLoader.load(
-    path,
-    (gltf) => {
-      currentModel = gltf.scene;
-
-      // Centrado y escalado
-      const box = new THREE.Box3().setFromObject(currentModel);
-      const size = box.getSize(new THREE.Vector3());
-      const center = box.getCenter(new THREE.Vector3());
-
-      currentModel.position.sub(center);
-
-      const maxDim = Math.max(size.x, size.y, size.z);
-      const scale = 2.8 / maxDim;
-      currentModel.scale.setScalar(scale);
-
-      // Activar sombras
-      currentModel.traverse((child) => {
-        if (child.isMesh) {
-          child.castShadow = true;
-          child.receiveShadow = true;
-        }
-      });
-
-      scene.add(currentModel);
-
-      controls.target.set(0, size.y * scale * 0.35, 0);
-      controls.update();
-
-      hideLoader();
-    },
-    undefined,
-    (error) => {
-      console.error('Error cargando modelo:', filename, error);
-      hideLoader();
-    }
-  );
+  loader.load(pathArchivo, (gltf) => {
+    modeloActual = gltf.scene;
+    scene.add(modeloActual);
+    console.log("✅ Modelo cargado:", pathArchivo);
+  }, undefined, (error) => {
+    console.error("❌ Error al cargar modelo:", error);
+  });
 }
 
-// Cargar el primer modelo
-loadModel('modelo1.glb');
+cargarModelo('/assets/modelo1.glb');
 
-// ========== INTERFAZ ==========
+// 5. CONTROLADOR MENÚ LATERAL
 const sidebar = document.getElementById('sidebar');
-const toggleBtn = document.getElementById('toggle-btn');
-const modelButtons = document.querySelectorAll('.model-btn');
+const toggleSidebarBtn = document.getElementById('toggle-sidebar');
 
-toggleBtn.addEventListener('click', () => {
+toggleSidebarBtn.addEventListener('click', () => {
   sidebar.classList.toggle('collapsed');
 });
 
-modelButtons.forEach((btn) => {
-  btn.addEventListener('click', () => {
-    modelButtons.forEach((b) => b.classList.remove('active'));
-    btn.classList.add('active');
-    loadModel(btn.dataset.model);
+// 6. VISTAS PREDEFINIDAS PARA EL CLIENTE (Si no hay nada en memoria, carga estas por defecto)
+const VISTAS_DEFAULT = [
+  { nombre: "Vista General", px: 0, py: 3, pz: 6, tx: 0, ty: 0, tz: 0 },
+  { nombre: "Agujero Central (Manzana)", px: 0, py: 4, pz: 0.1, tx: 0, ty: 0, tz: 0 },
+  { nombre: "Agujeros de Fijación (PCD)", px: 1.2, py: 2.5, pz: 2, tx: 0.3, ty: 0, tz: 0 },
+  { nombre: "Cama de Llanta / Caucho", px: 4.5, py: 0.5, pz: 0, tx: 0, ty: 0, tz: 0 }
+];
+
+let listaVistas = JSON.parse(localStorage.getItem('catalogo3d_vistas_rueda')) || VISTAS_DEFAULT;
+
+// Control visual del modo Admin vs Cliente
+const panelAdmin = document.getElementById('panel-admin');
+if (MODO_ADMINISTRADOR && panelAdmin) {
+  panelAdmin.style.display = 'flex';
+}
+
+function renderizarBotonesVistas() {
+  const contenedor = document.getElementById('lista-vistas-dinamica');
+  contenedor.innerHTML = '';
+
+  if (listaVistas.length === 0) {
+    contenedor.innerHTML = `<div style="color: #94a3b8; font-size: 0.75rem; text-align: center; padding: 8px;">Sin cotas o puntos cargados</div>`;
+    return;
+  }
+
+  listaVistas.forEach((vista, index) => {
+    const div = document.createElement('div');
+    div.className = 'btn-vista-item';
+    div.onclick = () => aplicarVista(index);
+
+    // Si está en Modo Admin muestra el botón '✕' para borrar
+    const botonBorrar = MODO_ADMINISTRADOR 
+      ? `<button class="btn-borrar-item" onclick="borrarVista(event, ${index})" title="Eliminar cota">✕</button>` 
+      : '';
+
+    div.innerHTML = `
+      <span>🔩 ${vista.nombre}</span>
+      ${botonBorrar}
+    `;
+    
+    contenedor.appendChild(div);
   });
-});
+}
 
-modelButtons[0].classList.add('active');
+// FUNCIONES DE ADMINISTRACIÓN
+window.guardarVistaActual = function() {
+  const nombreVista = prompt("Nombre de la cota/punto (ej: Diámetro Agujero Central, Distancia entre Agujeros, etc.):");
+  if (!nombreVista || nombreVista.trim() === "") return;
 
-// ========== RESIZE ==========
-window.addEventListener('resize', () => {
-  camera.aspect = window.innerWidth / window.innerHeight;
-  camera.updateProjectionMatrix();
-  renderer.setSize(window.innerWidth, window.innerHeight);
-});
+  const nuevaVista = {
+    nombre: nombreVista.trim(),
+    px: Number(camera.position.x.toFixed(2)),
+    py: Number(camera.position.y.toFixed(2)),
+    pz: Number(camera.position.z.toFixed(2)),
+    tx: Number(controls.target.x.toFixed(2)),
+    ty: Number(controls.target.y.toFixed(2)),
+    tz: Number(controls.target.z.toFixed(2))
+  };
 
-// ========== ANIMACIÓN ==========
+  listaVistas.push(nuevaVista);
+  localStorage.setItem('catalogo3d_vistas_rueda', JSON.stringify(listaVistas));
+  renderizarBotonesVistas();
+};
+
+window.exportarConfiguracionJSON = function() {
+  console.log("📋 COPIA ESTE ARRAY EN TU CÓDIGO (VISTAS_DEFAULT):");
+  console.log(JSON.stringify(listaVistas, null, 2));
+  alert("Las coordenadas se imprimieron en la consola (F12). Puedes copiarlas para dejarlas fijas en el código de producción.");
+};
+
+window.borrarVista = function(event, index) {
+  event.stopPropagation();
+  listaVistas.splice(index, 1);
+  localStorage.setItem('catalogo3d_vistas_rueda', JSON.stringify(listaVistas));
+  renderizarBotonesVistas();
+};
+
+// APLICAR COTA AL CLIENTE
+window.aplicarVista = function(index) {
+  const v = listaVistas[index];
+  if (!v) return;
+
+  camera.position.set(v.px, v.py, v.pz);
+  controls.target.set(v.tx, v.ty, v.tz);
+  controls.update();
+};
+
+window.cambiarModelo = function(nombreModelo) {
+  document.querySelectorAll('.sidebar-nav .nav-item').forEach(btn => btn.classList.remove('active'));
+  if (event && event.target) {
+    event.target.classList.add('active');
+  }
+
+  if (nombreModelo === 'modelo1') cargarModelo('/assets/modelo1.glb');
+  else if (nombreModelo === 'modelo2') cargarModelo('/assets/modelo2.glb');
+  else if (nombreModelo === 'modelo3') cargarModelo('/assets/modelo3.glb');
+};
+
+renderizarBotonesVistas();
+
+// 7. BUCLE DE ANIMACIÓN
 function animate() {
   requestAnimationFrame(animate);
   controls.update();
   renderer.render(scene, camera);
 }
+
 animate();
+
+// RESPONSIVE
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});

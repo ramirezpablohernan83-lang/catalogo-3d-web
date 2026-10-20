@@ -4,150 +4,210 @@
   box-sizing: border-box;
 }
 
-html, body {
+body, html {
   width: 100%;
   height: 100%;
   overflow: hidden;
-  font-family: system-ui, -apple-system, sans-serif;
-  background: #111;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  background-color: #000;
 }
 
-/* Contenedor del visor 3D */
-#viewer {
+#webgl-container {
+  width: 100vw;
+  height: 100vh;
   position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-}
-
-#viewer canvas {
-  display: block;
-  width: 100% !important;
-  height: 100% !important;
-}
-
-/* ========== PANEL LATERAL ========== */
-.sidebar {
-  position: fixed;
   top: 0;
   left: 0;
-  height: 100%;
+  z-index: 1;
+}
+
+/* --- MENÚ LATERAL IZQUIERDO --- */
+.sidebar {
+  position: absolute;
+  top: 0;
+  left: 0;
   width: 260px;
-  background: rgba(20, 20, 25, 0.72);
+  height: 100%;
+  background: rgba(15, 23, 42, 0.85);
   backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border-right: 1px solid rgba(255, 255, 255, 0.08);
-  z-index: 10;
+  border-right: 1px solid rgba(255, 255, 255, 0.15);
+  z-index: 20;
   display: flex;
   flex-direction: column;
-  transition: width 0.35s cubic-bezier(0.4, 0, 0.2, 1),
-              background 0.3s ease;
-  overflow: hidden;
+  transition: transform 0.3s ease-in-out;
 }
 
 .sidebar.collapsed {
-  width: 52px;
-  background: rgba(20, 20, 25, 0.45);
+  transform: translateX(-260px);
 }
 
-.toggle-btn {
-  width: 52px;
-  height: 52px;
-  border: none;
-  background: transparent;
-  color: #eee;
-  font-size: 1.4rem;
-  cursor: pointer;
-  flex-shrink: 0;
+.sidebar-header {
   display: flex;
   align-items: center;
-  justify-content: center;
+  gap: 12px;
+  padding: 20px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  position: relative;
+}
+
+.icon-btn {
+  background: rgba(15, 23, 42, 0.9);
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  font-size: 1.25rem;
+  cursor: pointer;
+  padding: 8px 12px;
+  border-radius: 8px;
+  position: absolute;
+  right: -50px;
+  top: 15px;
+  backdrop-filter: blur(8px);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.3);
   transition: background 0.2s;
 }
 
-.toggle-btn:hover {
-  background: rgba(255, 255, 255, 0.1);
+.icon-btn:hover {
+  background: rgba(59, 130, 246, 0.8);
 }
 
-.sidebar-content {
-  padding: 0 16px 24px;
-  opacity: 1;
-  transition: opacity 0.25s ease;
-  overflow: hidden;
-  white-space: nowrap;
-}
-
-.sidebar.collapsed .sidebar-content {
-  opacity: 0;
-  pointer-events: none;
-}
-
-.sidebar-content h2 {
-  color: #fff;
+.sidebar-title {
+  color: #f8fafc;
   font-size: 1.1rem;
   font-weight: 600;
-  margin-bottom: 20px;
-  letter-spacing: 0.02em;
+  margin-left: 10px;
 }
 
-.model-btn {
-  display: block;
-  width: 100%;
-  padding: 12px 14px;
-  margin-bottom: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.06);
-  color: #e0e0e0;
-  font-size: 0.95rem;
+.sidebar-nav {
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.nav-item {
+  background: rgba(255, 255, 255, 0.05);
+  color: #cbd5e1;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 12px 16px;
+  border-radius: 10px;
   cursor: pointer;
   text-align: left;
-  transition: background 0.2s, border-color 0.2s, transform 0.15s;
+  font-size: 0.9rem;
+  font-weight: 500;
+  transition: all 0.2s ease;
 }
 
-.model-btn:hover {
-  background: rgba(255, 255, 255, 0.12);
-  border-color: rgba(255, 255, 255, 0.3);
-}
-
-.model-btn.active {
-  background: rgba(80, 140, 255, 0.25);
-  border-color: rgba(80, 140, 255, 0.6);
+.nav-item:hover, .nav-item.active {
+  background: rgba(59, 130, 246, 0.3);
+  border-color: #3b82f6;
   color: #fff;
 }
 
-/* ========== LOADER ========== */
-.loader {
-  position: fixed;
-  inset: 0;
-  background: rgba(10, 10, 15, 0.75);
-  backdrop-filter: blur(6px);
+/* --- PANEL DERECHO (ESPECIFICACIONES) --- */
+.carrusel-vertical {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  z-index: 10;
   display: flex;
   flex-direction: column;
+  gap: 10px;
+  width: 240px;
+  max-height: 85vh;
+}
+
+.panel-admin {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  background: rgba(16, 185, 129, 0.15);
+  border: 1px dashed rgba(16, 185, 129, 0.5);
+  padding: 10px;
+  border-radius: 12px;
+}
+
+.btn-agregar-vista {
+  background: #10b981;
+  color: #fff;
+  border: none;
+  padding: 8px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 0.8rem;
+  transition: background 0.2s;
+}
+
+.btn-agregar-vista:hover {
+  background: #059669;
+}
+
+.btn-exportar-json {
+  background: rgba(255, 255, 255, 0.1);
+  color: #f8fafc;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  padding: 6px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 0.75rem;
+}
+
+.titulo-carrusel {
+  color: #94a3b8;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding-left: 4px;
+}
+
+.lista-vistas {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: rgba(15, 23, 42, 0.8);
+  backdrop-filter: blur(12px);
+  padding: 12px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+  overflow-y: auto;
+  max-height: 60vh;
+}
+
+.btn-vista-item {
+  display: flex;
+  justify-content: space-between;
   align-items: center;
-  justify-content: center;
-  z-index: 100;
-  color: #eee;
-  font-size: 0.95rem;
-  transition: opacity 0.35s ease, visibility 0.35s ease;
+  background: rgba(255, 255, 255, 0.05);
+  color: #f8fafc;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 10px 12px;
+  border-radius: 10px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 500;
+  transition: all 0.2s ease-in-out;
 }
 
-.loader.hidden {
-  opacity: 0;
-  visibility: hidden;
-  pointer-events: none;
+.btn-vista-item:hover {
+  background: rgba(59, 130, 246, 0.3);
+  border-color: #3b82f6;
+  transform: translateX(-2px);
 }
 
-.spinner {
-  width: 42px;
-  height: 42px;
-  border: 3px solid rgba(255, 255, 255, 0.15);
-  border-top-color: #6ea8ff;
-  border-radius: 50%;
-  animation: spin 0.8s linear infinite;
-  margin-bottom: 16px;
+.btn-borrar-item {
+  background: transparent;
+  border: none;
+  color: #f87171;
+  font-size: 0.8rem;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 4px;
+  opacity: 0.6;
 }
 
-@keyframes spin {
-  to { transform: rotate(360deg); }
+.btn-borrar-item:hover {
+  opacity: 1;
+  background: rgba(239, 68, 68, 0.2);
 }

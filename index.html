@@ -3,41 +3,39 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Catálogo 3D</title>
+  <title>Catálogo Técnico de Ruedas y Discos 3D</title>
   <link rel="stylesheet" href="style.css" />
-
-  <!-- Import map para Three.js -->
-  <script type="importmap">
-  {
-    "imports": {
-      "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
-      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
-    }
-  }
-  </script>
 </head>
 <body>
-  <!-- Panel lateral -->
-  <aside id="sidebar" class="sidebar">
-    <button id="toggle-btn" class="toggle-btn" title="Mostrar / ocultar menú">
-      ☰
-    </button>
 
-    <div class="sidebar-content">
-      <h2>Catálogo</h2>
-      <button class="model-btn" data-model="modelo1.glb">Objeto 1</button>
-      <button class="model-btn" data-model="modelo2.glb">Objeto 2</button>
-      <button class="model-btn" data-model="modelo3.glb">Objeto 3</button>
+  <!-- Visor 3D -->
+  <div id="webgl-container"></div>
+
+  <!-- MENÚ LATERAL IZQUIERDO (Modelos de Llantas) -->
+  <div id="sidebar" class="sidebar">
+    <div class="sidebar-header">
+      <h2 class="sidebar-title">Modelos Llantas</h2>
+      <button id="toggle-sidebar" class="icon-btn">☰</button>
     </div>
-  </aside>
+    <div class="sidebar-nav">
+      <button class="nav-item active" onclick="cambiarModelo('modelo1')">Disco / Llanta 1</button>
+      <button class="nav-item" onclick="cambiarModelo('modelo2')">Disco / Llanta 2</button>
+      <button class="nav-item" onclick="cambiarModelo('modelo3')">Disco / Llanta 3</button>
+    </div>
+  </div>
 
-  <!-- Contenedor del canvas 3D -->
-  <div id="viewer"></div>
+  <!-- PANEL DERECHO DE ENFOQUES TÉCNICOS -->
+  <div class="carrusel-vertical">
+    <!-- Panel del Administrador (Se oculta automáticamente en modo Cliente) -->
+    <div id="panel-admin" class="panel-admin" style="display: none;">
+      <button class="btn-agregar-vista" onclick="guardarVistaActual()">➕ Grabar Vista Actual</button>
+      <button class="btn-exportar-json" onclick="exportarConfiguracionJSON()">💾 Exportar Configuración</button>
+    </div>
 
-  <!-- Indicador de carga -->
-  <div id="loader" class="loader">
-    <div class="spinner"></div>
-    <p>Cargando modelo...</p>
+    <div class="titulo-carrusel">Especificaciones Técnicas</div>
+    
+    <!-- Lista donde se cargarán los botones de inspección -->
+    <div id="lista-vistas-dinamica" class="lista-vistas"></div>
   </div>
 
   <script type="module" src="main.js"></script>
