@@ -3,17 +3,11 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
 
-// ==========================================
-// CONFIGURACIÓN DE MODO
-// true  = Muestra botones de grabación/edición para el Administrador
-// false = Modo público/Cliente (sólo lectura de vistas predefinidas)
-const MODO_ADMINISTRADOR = true; 
-// ==========================================
-
-// 1. ESCENA, CÁMARA Y RENDERER
+// 1. ESCENA, CÁMARA PRINCIPAL Y RENDERER
 const container = document.querySelector('#webgl-container');
 const scene = new THREE.Scene();
 
+// Cámara principal interactiva que usará el usuario
 const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 100);
 camera.position.set(0, 3, 6);
 
@@ -43,7 +37,7 @@ rgbeLoader.load('/assets/hdri.hdr', (texture) => {
   console.warn("⚠️ No se pudo cargar el HDRI:", error);
 });
 
-// 3. ORBITCONTROLS CON LIBERTAD DE ROTACIÓN
+// 3. ORBITCONTROLS
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
 controls.dampingFactor = 0.05;
@@ -53,27 +47,7 @@ controls.maxPolarAngle = Math.PI / 2 - 0.05;
 controls.minPolarAngle = 0.1;
 controls.enablePan = true;
 
-// 4. CARGA DE MODELO 3D
-let modeloActual = null;
-const loader = new GLTFLoader();
-
-function cargarModelo(pathArchivo) {
-  if (modeloActual) {
-    scene.remove(modeloActual);
-  }
-
-  loader.load(pathArchivo, (gltf) => {
-    modeloActual = gltf.scene;
-    scene.add(modeloActual);
-    console.log("✅ Modelo cargado:", pathArchivo);
-  }, undefined, (error) => {
-    console.error("❌ Error al cargar modelo:", error);
-  });
-}
-
-cargarModelo('/assets/modelo1.glb');
-
-// 5. CONTROLADOR MENÚ LATERAL
+// 4. CONTROLADOR MENÚ LATERAL IZQUIERDO
 const sidebar = document.getElementById('sidebar');
 const toggleSidebarBtn = document.getElementById('toggle-sidebar');
 
@@ -81,92 +55,86 @@ toggleSidebarBtn.addEventListener('click', () => {
   sidebar.classList.toggle('collapsed');
 });
 
-// 6. VISTAS TÉCNICAS (DEFAULT PARA EL CLIENTE)
-const VISTAS_DEFAULT = [
-  { nombre: "Vista General", px: 0, py: 3, pz: 6, tx: 0, ty: 0, tz: 0 },
-  { nombre: "Agujero Central", px: 0, py: 4, pz: 0.1, tx: 0, ty: 0, tz: 0 },
-  { nombre: "Apernadura (PCD)", px: 1.2, py: 2.5, pz: 2, tx: 0.3, ty: 0, tz: 0 },
-  { nombre: "Cama de Caucho", px: 4.5, py: 0.5, pz: 0, tx: 0, ty: 0, tz: 0 }
-];
+// 5. CARGADOR DE MODELO Y EXTRACCIÓN AUTOMÁTICA DE CÁMARAS
+let modeloActual = null;
+let camarasDetectadas = [];
+const loader = new GLTFLoader();
 
-let listaVistas = JSON.parse(localStorage.getItem('catalogo3d_vistas_rueda')) || VISTAS_DEFAULT;
+function cargarModelo(pathArchivo) {
+  if (modeloActual) {
+    scene.remove(modeloActual);
+  }
 
-// Control visual de Modo Admin vs Cliente
-const panelAdmin = document.getElementById('panel-admin');
-if (MODO_ADMINISTRADOR && panelAdmin) {
-  panelAdmin.style.display = 'flex';
+  // Reiniciamos el arreglo de cámaras detectadas
+  camarasDetectadas = [];
+
+  loader.load(pathArchivo, (gltf) => {
+    modeloActual = gltf.scene;
+    scene.add(modeloActual);
+
+    // Escaneamos el modelo en busca de objetos Cámara creados en Blender
+    modeloActual.traverse((child) => {
+      if (child.isCamera || child.type === 'PerspectiveCamera') {
+        
+        // Calculamos la dirección hacia la que apunta la cámara en Blender
+        const direccion = new THREE.Vector3(0, 0, -1);
+        direccion.applyQuaternion(child.quaternion);
+
+        // Determinamos el punto objetivo (target) hacia donde mira
+        const posicionCamara = child.position.clone();
+        const puntoEnfoque = posicionCamara.clone().add(direccion.multiplyScalar(3));
+
+        camarasDetectadas.push({
+          nombre: child.name || `Vista ${camarasDetectadas.length + 1}`,
+          posicion: posicionCamara,
+          target: puntoEnfoque
+        });
+      }
+    });
+
+    console.log(`✅ Modelo cargado: ${pathArchivo}. Cámaras encontradas: ${camarasDetectadas.length}`);
+    
+    // Generar la interfaz de botones a partir de las cámaras encontradas
+    renderizarBotonesDeCamara();
+
+  }, undefined, (error) => {
+    console.error("❌ Error al cargar modelo:", error);
+  });
 }
 
-function renderizarBotonesVistas() {
+// 6. GENERADOR DINÁMICO DE BOTONES DE ENFOQUE
+function renderizarBotonesDeCamara() {
   const contenedor = document.getElementById('lista-vistas-dinamica');
   contenedor.innerHTML = '';
 
-  if (listaVistas.length === 0) {
-    contenedor.innerHTML = `<div style="color: #94a3b8; font-size: 0.65rem; text-align: center; padding: 6px;">Sin puntos cargados</div>`;
+  if (camarasDetectadas.length === 0) {
+    contenedor.innerHTML = `<div style="color: #94a3b8; font-size: 0.65rem; text-align: center; padding: 6px;">Sin cámaras en este .glb</div>`;
     return;
   }
 
-  listaVistas.forEach((vista, index) => {
+  camarasDetectadas.forEach((camData, index) => {
     const div = document.createElement('div');
     div.className = 'btn-vista-item';
-    div.onclick = () => aplicarVista(index);
+    div.onclick = () => aplicarCamaraBlender(index);
 
-    const botonBorrar = MODO_ADMINISTRADOR 
-      ? `<button class="btn-borrar-item" onclick="borrarVista(event, ${index})" title="Eliminar">✕</button>` 
-      : '';
-
-    div.innerHTML = `
-      <span>📍 ${vista.nombre}</span>
-      ${botonBorrar}
-    `;
-    
+    div.innerHTML = `<span>📍 ${camData.nombre}</span>`;
     contenedor.appendChild(div);
   });
 }
 
-// FUNCIONES DE ADMINISTRACIÓN
-window.guardarVistaActual = function() {
-  const nombreVista = prompt("Nombre de la cota o punto técnico:", `Punto ${listaVistas.length + 1}`);
-  if (!nombreVista || nombreVista.trim() === "") return;
+// Mover la cámara interactiva hacia las coordenadas de la cámara elegida
+window.aplicarCamaraBlender = function(index) {
+  const c = camarasDetectadas[index];
+  if (!c) return;
 
-  const nuevaVista = {
-    nombre: nombreVista.trim(),
-    px: Number(camera.position.x.toFixed(2)),
-    py: Number(camera.position.y.toFixed(2)),
-    pz: Number(camera.position.z.toFixed(2)),
-    tx: Number(controls.target.x.toFixed(2)),
-    ty: Number(controls.target.y.toFixed(2)),
-    tz: Number(controls.target.z.toFixed(2))
-  };
-
-  listaVistas.push(nuevaVista);
-  localStorage.setItem('catalogo3d_vistas_rueda', JSON.stringify(listaVistas));
-  renderizarBotonesVistas();
-};
-
-window.exportarConfiguracionJSON = function() {
-  console.log("📋 COPIA ESTE ARRAY EN VISTAS_DEFAULT:");
-  console.log(JSON.stringify(listaVistas, null, 2));
-  alert("Las coordenadas se imprimieron en la consola (F12).");
-};
-
-window.borrarVista = function(event, index) {
-  event.stopPropagation();
-  listaVistas.splice(index, 1);
-  localStorage.setItem('catalogo3d_vistas_rueda', JSON.stringify(listaVistas));
-  renderizarBotonesVistas();
-};
-
-// APLICAR VISTA (Mantiene total libertad de rotación al usuario)
-window.aplicarVista = function(index) {
-  const v = listaVistas[index];
-  if (!v) return;
-
-  camera.position.set(v.px, v.py, v.pz);
-  controls.target.set(v.tx, v.ty, v.tz);
+  camera.position.copy(c.posicion);
+  controls.target.copy(c.target);
   controls.update();
+
+  console.log(`🎬 Vista enfocada: ${c.nombre}`);
 };
 
+// Cambiar de modelo en el menú izquierdo
 window.cambiarModelo = function(nombreModelo) {
   document.querySelectorAll('.sidebar-nav .nav-item').forEach(btn => btn.classList.remove('active'));
   if (event && event.target) {
@@ -178,7 +146,8 @@ window.cambiarModelo = function(nombreModelo) {
   else if (nombreModelo === 'modelo3') cargarModelo('/assets/modelo3.glb');
 };
 
-renderizarBotonesVistas();
+// Cargar modelo inicial
+cargarModelo('/assets/modelo1.glb');
 
 // 7. BUCLE DE ANIMACIÓN
 function animate() {
