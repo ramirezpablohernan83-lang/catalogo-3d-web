@@ -103,53 +103,54 @@ body, html {
   color: #fff;
 }
 
-/* --- PANEL DERECHO (Optimizado para móviles) --- */
+/* --- PANEL DERECHO (ESPECIFICACIONES COLAPSABLE) --- */
 .carrusel-vertical {
   position: absolute;
   top: 15px;
   right: 15px;
   z-index: 10;
   display: flex;
-  flex-direction: column;
-  gap: 6px;
-  width: auto;
-  max-width: 190px;
+  align-items: flex-start;
+  transition: transform 0.3s ease-in-out;
 }
 
-.panel-admin {
+.carrusel-vertical.collapsed {
+  transform: translateX(230px); /* Se oculta hacia la derecha */
+}
+
+.specs-content {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  background: rgba(16, 185, 129, 0.2);
-  border: 1px dashed rgba(16, 185, 129, 0.5);
-  padding: 6px;
-  border-radius: 10px;
+  gap: 6px;
+  background: rgba(15, 23, 42, 0.85);
+  backdrop-filter: blur(12px);
+  padding: 12px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+  width: 190px;
 }
 
-.btn-agregar-vista {
-  background: #10b981;
+/* Botón flotante derecho para ocultar/mostrar */
+.icon-btn-right {
+  background: rgba(15, 23, 42, 0.9);
   color: #fff;
-  border: none;
-  padding: 6px 8px;
-  border-radius: 6px;
-  cursor: pointer;
-  font-weight: 600;
-  font-size: 0.75rem;
-  white-space: nowrap;
-}
-
-.btn-agregar-vista:hover {
-  background: #059669;
-}
-
-.btn-exportar-json {
-  background: rgba(255, 255, 255, 0.1);
-  color: #f8fafc;
   border: 1px solid rgba(255, 255, 255, 0.2);
-  padding: 4px 6px;
-  border-radius: 6px;
-  font-size: 0.7rem;
+  font-size: 1.1rem;
   cursor: pointer;
+  padding: 8px 10px;
+  border-radius: 8px;
+  position: absolute;
+  left: -48px;
+  top: 0;
+  backdrop-filter: blur(8px);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+  transition: background 0.2s;
+  z-index: 11;
+}
+
+.icon-btn-right:hover {
+  background: rgba(59, 130, 246, 0.8);
 }
 
 .titulo-carrusel {
@@ -159,18 +160,13 @@ body, html {
   text-transform: uppercase;
   letter-spacing: 0.05em;
   padding-left: 2px;
+  margin-bottom: 2px;
 }
 
 .lista-vistas {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  background: rgba(15, 23, 42, 0.85);
-  backdrop-filter: blur(12px);
-  padding: 8px;
-  border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
   overflow-y: auto;
   max-height: 45vh;
 }
@@ -194,19 +190,4 @@ body, html {
 .btn-vista-item:hover {
   background: rgba(59, 130, 246, 0.3);
   border-color: #3b82f6;
-}
-
-.btn-borrar-item {
-  background: transparent;
-  border: none;
-  color: #f87171;
-  font-size: 0.75rem;
-  cursor: pointer;
-  padding: 2px 4px;
-  opacity: 0.6;
-}
-
-.btn-borrar-item:hover {
-  opacity: 1;
-  background: rgba(239, 68, 68, 0.2);
 }

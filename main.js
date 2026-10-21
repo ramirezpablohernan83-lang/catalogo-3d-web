@@ -7,7 +7,6 @@ import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
 const container = document.querySelector('#webgl-container');
 const scene = new THREE.Scene();
 
-// Cámara principal interactiva que usará el usuario
 const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 100);
 camera.position.set(0, 3, 6);
 
@@ -47,7 +46,7 @@ controls.maxPolarAngle = Math.PI / 2 - 0.05;
 controls.minPolarAngle = 0.1;
 controls.enablePan = true;
 
-// 4. CONTROLADOR MENÚ LATERAL IZQUIERDO
+// 4. CONTROLADORES DE MENÚS COLAPSABLES (IZQUIERDO Y DERECHO)
 const sidebar = document.getElementById('sidebar');
 const toggleSidebarBtn = document.getElementById('toggle-sidebar');
 
@@ -55,7 +54,14 @@ toggleSidebarBtn.addEventListener('click', () => {
   sidebar.classList.toggle('collapsed');
 });
 
-// 5. CARGADOR DE MODELO Y EXTRACCIÓN AUTOMÁTICA DE CÁMARAS
+const specsPanel = document.getElementById('specs-panel');
+const toggleSpecsBtn = document.getElementById('toggle-specs');
+
+toggleSpecsBtn.addEventListener('click', () => {
+  specsPanel.classList.toggle('collapsed');
+});
+
+// 5. CARGADOR DE MODELO Y EXTRACCIÓN AUTOMÁTICA DE CÁMARAS DESDE BLENDER
 let modeloActual = null;
 let camarasDetectadas = [];
 const loader = new GLTFLoader();
@@ -65,22 +71,18 @@ function cargarModelo(pathArchivo) {
     scene.remove(modeloActual);
   }
 
-  // Reiniciamos el arreglo de cámaras detectadas
   camarasDetectadas = [];
 
   loader.load(pathArchivo, (gltf) => {
     modeloActual = gltf.scene;
     scene.add(modeloActual);
 
-    // Escaneamos el modelo en busca de objetos Cámara creados en Blender
+    // Escaneamos el .glb en busca de cámaras exportadas desde Blender
     modeloActual.traverse((child) => {
       if (child.isCamera || child.type === 'PerspectiveCamera') {
-        
-        // Calculamos la dirección hacia la que apunta la cámara en Blender
         const direccion = new THREE.Vector3(0, 0, -1);
         direccion.applyQuaternion(child.quaternion);
 
-        // Determinamos el punto objetivo (target) hacia donde mira
         const posicionCamara = child.position.clone();
         const puntoEnfoque = posicionCamara.clone().add(direccion.multiplyScalar(3));
 
@@ -93,8 +95,6 @@ function cargarModelo(pathArchivo) {
     });
 
     console.log(`✅ Modelo cargado: ${pathArchivo}. Cámaras encontradas: ${camarasDetectadas.length}`);
-    
-    // Generar la interfaz de botones a partir de las cámaras encontradas
     renderizarBotonesDeCamara();
 
   }, undefined, (error) => {
@@ -102,13 +102,13 @@ function cargarModelo(pathArchivo) {
   });
 }
 
-// 6. GENERADOR DINÁMICO DE BOTONES DE ENFOQUE
+// 6. GENERADOR DINÁMICO DE BOTONES DE CÁMARA
 function renderizarBotonesDeCamara() {
   const contenedor = document.getElementById('lista-vistas-dinamica');
   contenedor.innerHTML = '';
 
   if (camarasDetectadas.length === 0) {
-    contenedor.innerHTML = `<div style="color: #94a3b8; font-size: 0.65rem; text-align: center; padding: 6px;">Sin cámaras en este .glb</div>`;
+    contenedor.innerHTML = `<div style="color: #94a3b8; font-size: 0.65rem; text-align: center; padding: 6px;">Sin cámaras en .glb</div>`;
     return;
   }
 
@@ -122,7 +122,6 @@ function renderizarBotonesDeCamara() {
   });
 }
 
-// Mover la cámara interactiva hacia las coordenadas de la cámara elegida
 window.aplicarCamaraBlender = function(index) {
   const c = camarasDetectadas[index];
   if (!c) return;
@@ -134,7 +133,6 @@ window.aplicarCamaraBlender = function(index) {
   console.log(`🎬 Vista enfocada: ${c.nombre}`);
 };
 
-// Cambiar de modelo en el menú izquierdo
 window.cambiarModelo = function(nombreModelo) {
   document.querySelectorAll('.sidebar-nav .nav-item').forEach(btn => btn.classList.remove('active'));
   if (event && event.target) {

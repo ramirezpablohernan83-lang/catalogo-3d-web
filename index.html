@@ -24,18 +24,16 @@
     </div>
   </div>
 
-  <!-- PANEL DERECHO (Optimizado y compacto para móviles) -->
-  <div class="carrusel-vertical">
-    <!-- Panel del Administrador (Se oculta en modo Cliente) -->
-    <div id="panel-admin" class="panel-admin" style="display: none;">
-      <button class="btn-agregar-vista" onclick="guardarVistaActual()">➕ Grabar Vista</button>
-      <button class="btn-exportar-json" onclick="exportarConfiguracionJSON()">💾 Exportar</button>
-    </div>
+  <!-- PANEL DERECHO (Especificaciones y Cámaras - Colapsable) -->
+  <div id="specs-panel" class="carrusel-vertical">
+    <!-- Botón flotante para ocultar/mostrar a la derecha -->
+    <button id="toggle-specs" class="icon-btn-right">📐</button>
 
-    <div class="titulo-carrusel">Especificaciones</div>
-    
-    <!-- Lista donde se cargan los botones de inspección -->
-    <div id="lista-vistas-dinamica" class="lista-vistas"></div>
+    <div class="specs-content">
+      <div class="titulo-carrusel">Especificaciones</div>
+      <!-- Lista generada automáticamente por las cámaras del .glb -->
+      <div id="lista-vistas-dinamica" class="lista-vistas"></div>
+    </div>
   </div>
 
   <script type="module" src="main.js"></script>
