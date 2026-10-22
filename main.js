@@ -25,13 +25,12 @@ const dirLight = new THREE.DirectionalLight(0xffffff, 1.2);
 dirLight.position.set(5, 10, 7);
 scene.add(dirLight);
 
-// 2. ENTORNO Y FONDO HDRI
+// 2. ENTORNO HDRI
 const rgbeLoader = new RGBELoader();
 rgbeLoader.load('/assets/hdri.hdr', (texture) => {
   texture.mapping = THREE.EquirectangularReflectionMapping;
   scene.environment = texture;
   scene.background = texture;
-  console.log("✅ HDRI cargado correctamente.");
 }, undefined, (error) => {
   console.warn("⚠️ No se pudo cargar el HDRI:", error);
 });
@@ -49,21 +48,39 @@ controls.enablePan = true;
 // 4. CONTROLADORES DE MENÚS COLAPSABLES (IZQUIERDO Y DERECHO)
 const sidebar = document.getElementById('sidebar');
 const toggleSidebarBtn = document.getElementById('toggle-sidebar');
-
-toggleSidebarBtn.addEventListener('click', () => {
-  sidebar.classList.toggle('collapsed');
-});
+toggleSidebarBtn.addEventListener('click', () => sidebar.classList.toggle('collapsed'));
 
 const specsPanel = document.getElementById('specs-panel');
 const toggleSpecsBtn = document.getElementById('toggle-specs');
+toggleSpecsBtn.addEventListener('click', () => specsPanel.classList.toggle('collapsed'));
 
-toggleSpecsBtn.addEventListener('click', () => {
-  specsPanel.classList.toggle('collapsed');
+// 5. VARIABLES DE ANIMACIÓN Y MAPEO CÁMARA-COTA
+let modeloActual = null;
+let puntosInteres = [];
+let cotaActiva = null;
+
+// Estado para transición suave de cámara (Lerp)
+let animandoCamara = false;
+let targetPosCamara = new THREE.Vector3();
+let targetFocusControls = new THREE.Vector3();
+
+// VELOCIDAD DE TRANSICIÓN: Un valor menor (0.02) hace el movimiento más lento y suave
+const VELOCIDAD_TRANSICION = 0.022; 
+
+// Estado para desvanecimiento paulatino de cota (Fade Out)
+let desvanecerCotas = false;
+let opacidadCotas = 1.0;
+
+// INTERRUPCIÓN DE CÁMARA Y LIBERTAD TOTAL AL INTERACTUAR:
+// Al tocar/arrastrar en la pantalla, cancelamos la animación de la cámara para eliminar el "efecto imán"
+controls.addEventListener('start', () => {
+  animandoCamara = false; // Cancela la fuerza hacia el punto guardado inmediatamente
+  if (cotaActiva) {
+    desvanecerCotas = true; // Inicia el desvanecimiento de la cota
+  }
 });
 
-// 5. CARGADOR DE MODELO Y EXTRACCIÓN AUTOMÁTICA DE CÁMARAS DESDE BLENDER
-let modeloActual = null;
-let camarasDetectadas = [];
+// 6. CARGADOR DE MODELO .GLB Y MAPEO INTELIGENTE
 const loader = new GLTFLoader();
 
 function cargarModelo(pathArchivo) {
@@ -71,30 +88,62 @@ function cargarModelo(pathArchivo) {
     scene.remove(modeloActual);
   }
 
-  camarasDetectadas = [];
+  puntosInteres = [];
+  cotaActiva = null;
 
   loader.load(pathArchivo, (gltf) => {
     modeloActual = gltf.scene;
     scene.add(modeloActual);
 
-    // Escaneamos el .glb en busca de cámaras exportadas desde Blender
+    const camarasEncontradas = [];
+    const cotasEncontradas = new Map();
+
     modeloActual.traverse((child) => {
+      // 1. Detectar Cámaras
       if (child.isCamera || child.type === 'PerspectiveCamera') {
-        const direccion = new THREE.Vector3(0, 0, -1);
-        direccion.applyQuaternion(child.quaternion);
-
-        const posicionCamara = child.position.clone();
-        const puntoEnfoque = posicionCamara.clone().add(direccion.multiplyScalar(3));
-
-        camarasDetectadas.push({
-          nombre: child.name || `Vista ${camarasDetectadas.length + 1}`,
-          posicion: posicionCamara,
-          target: puntoEnfoque
-        });
+        camarasEncontradas.push(child);
+      }
+      
+      // 2. Detectar Mallas de Cotas
+      const nombreLower = child.name.toLowerCase();
+      if (nombreLower.includes('cota') || nombreLower.includes('medida')) {
+        if (child.material) {
+          child.material.transparent = true;
+          child.material.opacity = 0;
+        }
+        child.visible = false;
+        const claveLimpia = nombreLower.replace('cota_', '').replace('medida_', '').replace('.001', '');
+        cotasEncontradas.set(claveLimpia, child);
       }
     });
 
-    console.log(`✅ Modelo cargado: ${pathArchivo}. Cámaras encontradas: ${camarasDetectadas.length}`);
+    // 3. Vincular cada Cámara con su Cota correspondiente
+    camarasEncontradas.forEach((cam) => {
+      const direccion = new THREE.Vector3(0, 0, -1);
+      direccion.applyQuaternion(cam.quaternion);
+
+      const posicionCamara = cam.position.clone();
+      const puntoEnfoque = posicionCamara.clone().add(direccion.multiplyScalar(3));
+
+      const nombreCamLower = cam.name.toLowerCase();
+      let cotaAsociada = null;
+
+      for (let [clave, meshCota] of cotasEncontradas.entries()) {
+        if (nombreCamLower.includes(clave)) {
+          cotaAsociada = meshCota;
+          break;
+        }
+      }
+
+      puntosInteres.push({
+        nombre: cam.name || `Vista ${puntosInteres.length + 1}`,
+        posicion: posicionCamara,
+        target: puntoEnfoque,
+        cota: cotaAsociada
+      });
+    });
+
+    console.log(`✅ Modelo cargado. Puntos de interés configurados: ${puntosInteres.length}`);
     renderizarBotonesDeCamara();
 
   }, undefined, (error) => {
@@ -102,35 +151,51 @@ function cargarModelo(pathArchivo) {
   });
 }
 
-// 6. GENERADOR DINÁMICO DE BOTONES DE CÁMARA
+// 7. RENDERIZADO DINÁMICO DE BOTONES
 function renderizarBotonesDeCamara() {
   const contenedor = document.getElementById('lista-vistas-dinamica');
   contenedor.innerHTML = '';
 
-  if (camarasDetectadas.length === 0) {
+  if (puntosInteres.length === 0) {
     contenedor.innerHTML = `<div style="color: #94a3b8; font-size: 0.65rem; text-align: center; padding: 6px;">Sin cámaras en .glb</div>`;
     return;
   }
 
-  camarasDetectadas.forEach((camData, index) => {
+  puntosInteres.forEach((punto, index) => {
     const div = document.createElement('div');
     div.className = 'btn-vista-item';
-    div.onclick = () => aplicarCamaraBlender(index);
+    div.onclick = () => seleccionarPuntoDeInteres(index);
 
-    div.innerHTML = `<span>📍 ${camData.nombre}</span>`;
+    div.innerHTML = `<span>📍 ${punto.nombre}</span>`;
     contenedor.appendChild(div);
   });
 }
 
-window.aplicarCamaraBlender = function(index) {
-  const c = camarasDetectadas[index];
-  if (!c) return;
+window.seleccionarPuntoDeInteres = function(index) {
+  const p = puntosInteres[index];
+  if (!p) return;
 
-  camera.position.copy(c.posicion);
-  controls.target.copy(c.target);
-  controls.update();
+  // Ocultar cota activa anterior si existe
+  if (cotaActiva && cotaActiva !== p.cota) {
+    cotaActiva.visible = false;
+    if (cotaActiva.material) cotaActiva.material.opacity = 0;
+  }
 
-  console.log(`🎬 Vista enfocada: ${c.nombre}`);
+  // Definir las coordenadas destino e iniciar la transición pausada
+  targetPosCamara.copy(p.posicion);
+  targetFocusControls.copy(p.target);
+  animandoCamara = true;
+
+  // Mostrar cota asociada
+  if (p.cota) {
+    cotaActiva = p.cota;
+    cotaActiva.visible = true;
+    desvanecerCotas = false;
+    opacidadCotas = 1.0;
+    if (cotaActiva.material) cotaActiva.material.opacity = 1.0;
+  } else {
+    cotaActiva = null;
+  }
 };
 
 window.cambiarModelo = function(nombreModelo) {
@@ -147,9 +212,35 @@ window.cambiarModelo = function(nombreModelo) {
 // Cargar modelo inicial
 cargarModelo('/assets/modelo1.glb');
 
-// 7. BUCLE DE ANIMACIÓN
+// 8. BUCLE DE ANIMACIÓN
 function animate() {
   requestAnimationFrame(animate);
+
+  // Interpolación suave y pausada de movimiento de cámara
+  if (animandoCamara) {
+    camera.position.lerp(targetPosCamara, VELOCIDAD_TRANSICION);
+    controls.target.lerp(targetFocusControls, VELOCIDAD_TRANSICION);
+
+    // Finalizar animación automáticamente cuando ya está extremadamente cerca
+    if (camera.position.distanceTo(targetPosCamara) < 0.005) {
+      camera.position.copy(targetPosCamara);
+      controls.target.copy(targetFocusControls);
+      animandoCamara = false;
+    }
+  }
+
+  // Fade-out paulatino de cota al orbitar
+  if (desvanecerCotas && cotaActiva && cotaActiva.material) {
+    opacidadCotas -= 0.03;
+    if (opacidadCotas <= 0) {
+      opacidadCotas = 0;
+      cotaActiva.visible = false;
+      desvanecerCotas = false;
+      cotaActiva = null;
+    }
+    cotaActiva.material.opacity = opacidadCotas;
+  }
+
   controls.update();
   renderer.render(scene, camera);
 }

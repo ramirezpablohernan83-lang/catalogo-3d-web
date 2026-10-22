@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Catálogo Técnico de Ruedas y Discos 3D</title>
+  <title>Catálogo Técnico 3D Interactivo</title>
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
@@ -11,10 +11,10 @@
   <!-- Visor 3D -->
   <div id="webgl-container"></div>
 
-  <!-- MENÚ LATERAL IZQUIERDO (Modelos) -->
-  <div id="sidebar" class="sidebar">
+  <!-- MENÚ LATERAL IZQUIERDO (Modelos - Inicia Oculto) -->
+  <div id="sidebar" class="sidebar collapsed">
     <div class="sidebar-header">
-      <h2 class="sidebar-title">Modelos Llantas</h2>
+      <h2 class="sidebar-title">Modelos</h2>
       <button id="toggle-sidebar" class="icon-btn">☰</button>
     </div>
     <div class="sidebar-nav">
@@ -24,14 +24,13 @@
     </div>
   </div>
 
-  <!-- PANEL DERECHO (Especificaciones y Cámaras - Colapsable) -->
-  <div id="specs-panel" class="carrusel-vertical">
-    <!-- Botón flotante para ocultar/mostrar a la derecha -->
+  <!-- PANEL DERECHO (Especificaciones y Cámaras - Inicia Oculto) -->
+  <div id="specs-panel" class="carrusel-vertical collapsed">
+    <!-- Botón flotante derecho -->
     <button id="toggle-specs" class="icon-btn-right">📐</button>
 
     <div class="specs-content">
       <div class="titulo-carrusel">Especificaciones</div>
-      <!-- Lista generada automáticamente por las cámaras del .glb -->
       <div id="lista-vistas-dinamica" class="lista-vistas"></div>
     </div>
   </div>

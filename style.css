@@ -21,7 +21,7 @@ body, html {
   z-index: 1;
 }
 
-/* --- MENÚ LATERAL IZQUIERDO --- */
+/* --- MENÚ LATERAL IZQUIERDO (MODELOS) --- */
 .sidebar {
   position: absolute;
   top: 0;
@@ -37,6 +37,7 @@ body, html {
   transition: transform 0.3s ease-in-out;
 }
 
+/* Oculto hacia la izquierda */
 .sidebar.collapsed {
   transform: translateX(-260px);
 }
@@ -50,6 +51,7 @@ body, html {
   position: relative;
 }
 
+/* Botón flotante izquierdo (☰) */
 .icon-btn {
   background: rgba(15, 23, 42, 0.9);
   color: #fff;
@@ -64,6 +66,7 @@ body, html {
   backdrop-filter: blur(8px);
   box-shadow: 0 4px 12px rgba(0,0,0,0.3);
   transition: background 0.2s;
+  z-index: 21;
 }
 
 .icon-btn:hover {
@@ -103,7 +106,7 @@ body, html {
   color: #fff;
 }
 
-/* --- PANEL DERECHO (ESPECIFICACIONES COLAPSABLE) --- */
+/* --- PANEL DERECHO (ESPECIFICACIONES / CÁMARAS) --- */
 .carrusel-vertical {
   position: absolute;
   top: 15px;
@@ -114,8 +117,9 @@ body, html {
   transition: transform 0.3s ease-in-out;
 }
 
+/* Oculto hacia la derecha */
 .carrusel-vertical.collapsed {
-  transform: translateX(230px); /* Se oculta hacia la derecha */
+  transform: translateX(220px);
 }
 
 .specs-content {
@@ -131,7 +135,7 @@ body, html {
   width: 190px;
 }
 
-/* Botón flotante derecho para ocultar/mostrar */
+/* Botón flotante derecho (📐) */
 .icon-btn-right {
   background: rgba(15, 23, 42, 0.9);
   color: #fff;
