@@ -45,7 +45,7 @@ controls.maxPolarAngle = Math.PI / 2 - 0.05;
 controls.minPolarAngle = 0.1;
 controls.enablePan = true;
 
-// 4. CONTROLADORES DE MENÚS COLAPSABLES (IZQUIERDO Y DERECHO)
+// 4. CONTROLADORES DE MENÚS COLAPSABLES
 const sidebar = document.getElementById('sidebar');
 const toggleSidebarBtn = document.getElementById('toggle-sidebar');
 toggleSidebarBtn.addEventListener('click', () => sidebar.classList.toggle('collapsed'));
@@ -54,29 +54,32 @@ const specsPanel = document.getElementById('specs-panel');
 const toggleSpecsBtn = document.getElementById('toggle-specs');
 toggleSpecsBtn.addEventListener('click', () => specsPanel.classList.toggle('collapsed'));
 
-// 5. VARIABLES DE ANIMACIÓN Y MAPEO CÁMARA-COTA
+// 5. VARIABLES DE ANIMACIÓN POR TIEMPO UNIFORME Y MAPEO CÁMARA-COTA
 let modeloActual = null;
 let puntosInteres = [];
 let cotaActiva = null;
 
-// Estado para transición suave de cámara (Lerp)
+// Control de animación basada en tiempo (duración constante para todos los modelos)
 let animandoCamara = false;
-let targetPosCamara = new THREE.Vector3();
-let targetFocusControls = new THREE.Vector3();
+let tiempoInicioAnimacion = 0;
+const duracionAnimacion = 1200; // Duración fija en milisegundos (1.2 segundos por transición)
 
-// VELOCIDAD DE TRANSICIÓN: Un valor menor (0.02) hace el movimiento más lento y suave
-const VELOCIDAD_TRANSICION = 0.022; 
+let posInicialCamara = new THREE.Vector3();
+let targetPosCamara = new THREE.Vector3();
+let focusInicialControls = new THREE.Vector3();
+let targetFocusControls = new THREE.Vector3();
 
 // Estado para desvanecimiento paulatino de cota (Fade Out)
 let desvanecerCotas = false;
 let opacidadCotas = 1.0;
 
-// INTERRUPCIÓN DE CÁMARA Y LIBERTAD TOTAL AL INTERACTUAR:
-// Al tocar/arrastrar en la pantalla, cancelamos la animación de la cámara para eliminar el "efecto imán"
+// Al interactuar manualmente, cancelamos cualquier transición en curso para dar libertad total
 controls.addEventListener('start', () => {
-  animandoCamara = false; // Cancela la fuerza hacia el punto guardado inmediatamente
+  if (animandoCamara) {
+    animandoCamara = false;
+  }
   if (cotaActiva) {
-    desvanecerCotas = true; // Inicia el desvanecimiento de la cota
+    desvanecerCotas = true;
   }
 });
 
@@ -90,10 +93,17 @@ function cargarModelo(pathArchivo) {
 
   puntosInteres = [];
   cotaActiva = null;
+  animandoCamara = false;
 
   loader.load(pathArchivo, (gltf) => {
     modeloActual = gltf.scene;
     scene.add(modeloActual);
+
+    // Centrar el target de los controles automáticamente al centro del modelo cargado
+    const box = new THREE.Box3().setFromObject(modeloActual);
+    const center = box.getCenter(new THREE.Vector3());
+    controls.target.copy(center);
+    controls.update();
 
     const camarasEncontradas = [];
     const cotasEncontradas = new Map();
@@ -181,9 +191,14 @@ window.seleccionarPuntoDeInteres = function(index) {
     if (cotaActiva.material) cotaActiva.material.opacity = 0;
   }
 
-  // Definir las coordenadas destino e iniciar la transición pausada
+  // Configurar puntos de partida y llegada para la interpolación temporal
+  posInicialCamara.copy(camera.position);
+  focusInicialControls.copy(controls.target);
+
   targetPosCamara.copy(p.posicion);
   targetFocusControls.copy(p.target);
+
+  tiempoInicioAnimacion = performance.now();
   animandoCamara = true;
 
   // Mostrar cota asociada
@@ -216,13 +231,18 @@ cargarModelo('/assets/modelo1.glb');
 function animate() {
   requestAnimationFrame(animate);
 
-  // Interpolación suave y pausada de movimiento de cámara
+  // Transición suave basada en tiempo real (Velocidad constante garantizada para cualquier modelo)
   if (animandoCamara) {
-    camera.position.lerp(targetPosCamara, VELOCIDAD_TRANSICION);
-    controls.target.lerp(targetFocusControls, VELOCIDAD_TRANSICION);
+    const tiempoActual = performance.now();
+    const progreso = (tiempoActual - tiempoInicioAnimacion) / duracionAnimacion;
 
-    // Finalizar animación automáticamente cuando ya está extremadamente cerca
-    if (camera.position.distanceTo(targetPosCamara) < 0.005) {
+    if (progreso < 1.0) {
+      // Función de suavizado easeInOut para que arranque y frene con elegancia
+      const easeProgress = progreso < 0.5 ? 2 * progreso * progreso : 1 - Math.pow(-2 * progreso + 2, 2) / 2;
+
+      camera.position.lerpVectors(posInicialCamara, targetPosCamara, easeProgress);
+      controls.target.lerpVectors(focusInicialControls, targetFocusControls, easeProgress);
+    } else {
       camera.position.copy(targetPosCamara);
       controls.target.copy(targetFocusControls);
       animandoCamara = false;
