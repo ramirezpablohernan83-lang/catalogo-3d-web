@@ -56,7 +56,6 @@ const specsPanel = document.getElementById('specs-panel');
 const toggleSpecsBtn = document.getElementById('toggle-specs');
 toggleSpecsBtn.addEventListener('click', () => specsPanel.classList.toggle('collapsed'));
 
-// Función global para cerrar bienvenida al hacer click en el botón o interactuar
 window.cerrarBienvenida = function() {
   const overlay = document.getElementById('welcome-overlay');
   if (overlay) {
@@ -87,7 +86,7 @@ let desvanecerCotas = false;
 let opacidadCotas = 1.0;
 
 controls.addEventListener('start', () => {
-  window.cerrarBienvenida(); // Cierra bienvenida al tocar el visor
+  window.cerrarBienvenida();
   if (animandoCamara) {
     animandoCamara = false;
   }
@@ -152,7 +151,6 @@ function cargarModelo(pathArchivo) {
       }
     });
 
-    // --- CONFIGURACIÓN DE VISTA INICIAL (Camara_Default o Fallback automático) ---
     if (camaraDefaultEncontrada) {
       const posDef = camaraDefaultEncontrada.position.clone();
       const nombreDefLower = camaraDefaultEncontrada.name.toLowerCase();
@@ -171,7 +169,6 @@ function cargarModelo(pathArchivo) {
       camera.position.copy(posDef);
       controls.update();
     } else {
-      // Fallback matemático automático si no existe Camara_Default
       controls.target.copy(center);
       const fovRad = (camera.fov * Math.PI) / 180;
       let distanciaIdeal = radioModelo / Math.sin(fovRad / 2);
@@ -180,9 +177,7 @@ function cargarModelo(pathArchivo) {
       camera.position.copy(center).add(offsetInicial);
       controls.update();
     }
-    // --------------------------------------------------------------------------
 
-    // Mapeo de cámaras de interés y cotas
     camarasEncontradas.forEach((cam) => {
       const posicionCamara = cam.position.clone();
       const nombreCamLower = cam.name.toLowerCase();
