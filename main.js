@@ -11,7 +11,6 @@ const esMovil = window.innerHeight > window.innerWidth;
 const fovInicial = esMovil ? 60 : 45;
 
 const camera = new THREE.PerspectiveCamera(fovInicial, window.innerWidth / window.innerHeight, 0.1, 100);
-camera.position.set(0, 3, 6);
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
@@ -43,7 +42,7 @@ const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
 controls.dampingFactor = 0.05;
 controls.minDistance = 2;
-controls.maxDistance = 12;
+controls.maxDistance = 15;
 controls.maxPolarAngle = Math.PI / 2 - 0.05;
 controls.minPolarAngle = 0.1;
 controls.enablePan = true;
@@ -57,7 +56,15 @@ const specsPanel = document.getElementById('specs-panel');
 const toggleSpecsBtn = document.getElementById('toggle-specs');
 toggleSpecsBtn.addEventListener('click', () => specsPanel.classList.toggle('collapsed'));
 
-// 5. VARIABLES DE ANIMACIÓN Y TOLERANCIA DE MOVIMIENTO
+// Función global para cerrar bienvenida al hacer click en el botón o interactuar
+window.cerrarBienvenida = function() {
+  const overlay = document.getElementById('welcome-overlay');
+  if (overlay) {
+    overlay.classList.add('hidden');
+  }
+};
+
+// 5. VARIABLES DE ANIMACIÓN Y TOLERANCIA
 let modeloActual = null;
 let puntosInteres = [];
 let cotaActiva = null;
@@ -71,22 +78,22 @@ let targetPosCamara = new THREE.Vector3();
 let focusInicialControls = new THREE.Vector3();
 let targetFocusControls = new THREE.Vector3();
 
-// Variables para controlar la tolerancia de movimiento libre
 let cotaFijadaActiva = false;
 let refCamPos = new THREE.Vector3();
 let refTargetPos = new THREE.Vector3();
-const TOLERANCIA_MOVIMIENTO = 1.2; 
+const TOLERANCIA_MOVIMIENTO = 1.5; 
 
 let desvanecerCotas = false;
 let opacidadCotas = 1.0;
 
 controls.addEventListener('start', () => {
+  window.cerrarBienvenida(); // Cierra bienvenida al tocar el visor
   if (animandoCamara) {
     animandoCamara = false;
   }
 });
 
-// 6. CARGADOR DE MODELO .GLB Y MAPEO INTELIGENTE (CON TARGETS DE BLENDER)
+// 6. CARGADOR DE MODELO .GLB CON SOPORTE DE CAMARA_DEFAULT Y TARGETS
 const loader = new GLTFLoader();
 
 function cargarModelo(pathArchivo) {
@@ -103,25 +110,29 @@ function cargarModelo(pathArchivo) {
     modeloActual = gltf.scene;
     scene.add(modeloActual);
 
-    // ¡CRUCIAL! Actualizamos la matriz del mundo para que Blender Empties entreguen posiciones reales
     modeloActual.updateMatrixWorld(true);
 
     const box = new THREE.Box3().setFromObject(modeloActual);
     const center = box.getCenter(new THREE.Vector3());
-    controls.target.copy(center);
-    controls.update();
+    const sphere = new THREE.Sphere();
+    box.getBoundingSphere(sphere);
+    const radioModelo = sphere.radius;
 
     const camarasEncontradas = [];
+    let camaraDefaultEncontrada = null;
     const targetsEncontrados = new Map();
     const cotasEncontradas = new Map();
 
     modeloActual.traverse((child) => {
-      // 1. Detectar Cámaras
       if (child.isCamera || child.type === 'PerspectiveCamera') {
-        camarasEncontradas.push(child);
+        const nombreLower = child.name.toLowerCase();
+        if (nombreLower.includes('default') || nombreLower.includes('inicio') || nombreLower.includes('camara_default')) {
+          camaraDefaultEncontrada = child;
+        } else {
+          camarasEncontradas.push(child);
+        }
       }
       
-      // 2. Detectar Targets invisibles en Blender (Ej: objetos vacíos nombrados 'Target_Fijacion')
       const nombreLower = child.name.toLowerCase();
       if (nombreLower.includes('target_')) {
         const worldPos = new THREE.Vector3();
@@ -130,7 +141,6 @@ function cargarModelo(pathArchivo) {
         targetsEncontrados.set(claveTarget, worldPos);
       }
 
-      // 3. Detectar Mallas de Cotas
       if (nombreLower.includes('cota') || nombreLower.includes('medida')) {
         if (child.material) {
           child.material.transparent = true;
@@ -142,12 +152,41 @@ function cargarModelo(pathArchivo) {
       }
     });
 
-    // 4. Vincular Cámaras, Targets y Cotas
+    // --- CONFIGURACIÓN DE VISTA INICIAL (Camara_Default o Fallback automático) ---
+    if (camaraDefaultEncontrada) {
+      const posDef = camaraDefaultEncontrada.position.clone();
+      const nombreDefLower = camaraDefaultEncontrada.name.toLowerCase();
+      
+      let targetDef = null;
+      for (let [clave, posTarget] of targetsEncontrados.entries()) {
+        if (nombreDefLower.includes(clave) || clave === 'default' || clave === 'inicio') {
+          targetDef = posTarget.clone();
+          break;
+        }
+      }
+
+      if (!targetDef) targetDef = center.clone();
+
+      controls.target.copy(targetDef);
+      camera.position.copy(posDef);
+      controls.update();
+    } else {
+      // Fallback matemático automático si no existe Camara_Default
+      controls.target.copy(center);
+      const fovRad = (camera.fov * Math.PI) / 180;
+      let distanciaIdeal = radioModelo / Math.sin(fovRad / 2);
+      distanciaIdeal *= 1.4;
+      const offsetInicial = new THREE.Vector3(0, radioModelo * 0.5, distanciaIdeal);
+      camera.position.copy(center).add(offsetInicial);
+      controls.update();
+    }
+    // --------------------------------------------------------------------------
+
+    // Mapeo de cámaras de interés y cotas
     camarasEncontradas.forEach((cam) => {
       const posicionCamara = cam.position.clone();
       const nombreCamLower = cam.name.toLowerCase();
 
-      // Buscar si existe un Target específico en Blender para esta cámara
       let puntoEnfoque = null;
       for (let [clave, posTarget] of targetsEncontrados.entries()) {
         if (nombreCamLower.includes(clave)) {
@@ -156,14 +195,12 @@ function cargarModelo(pathArchivo) {
         }
       }
 
-      // Respaldo por si la cámara no tiene un Target asignado
       if (!puntoEnfoque) {
         const direccion = new THREE.Vector3(0, 0, -1);
         direccion.applyQuaternion(cam.quaternion);
         puntoEnfoque = posicionCamara.clone().add(direccion.multiplyScalar(3));
       }
 
-      // Buscar Cota asociada por nombre
       let cotaAsociada = null;
       for (let [clave, meshCota] of cotasEncontradas.entries()) {
         if (nombreCamLower.includes(clave)) {
@@ -209,6 +246,7 @@ function renderizarBotonesDeCamara() {
 }
 
 window.seleccionarPuntoDeInteres = function(index) {
+  window.cerrarBienvenida();
   const p = puntosInteres[index];
   if (!p) return;
 

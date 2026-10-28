@@ -8,10 +8,27 @@
 </head>
 <body>
 
+  <!-- PANTALLA / TARJETA DE BIENVENIDA INICIAL CON ANIMACIÓN DE GIRO -->
+  <div id="welcome-overlay" class="welcome-overlay">
+    <div class="welcome-card">
+      <span class="badge-industrial">Catálogo de Ingeniería 3D</span>
+      <h1 id="product-title">Llanta Industrial de Alta Resistencia</h1>
+      <p id="product-desc">Inspección técnica detallada, cotas normalizadas y visualización interactiva en 360°.</p>
+      
+      <!-- Animación intuitiva del dedo rotando -->
+      <div class="gesture-container">
+        <div class="hand-icon">👆</div>
+        <span class="gesture-text">Desliza para rotar en 360°</span>
+      </div>
+
+      <button id="btn-start" class="btn-start" onclick="cerrarBienvenida()">Explorar Modelo</button>
+    </div>
+  </div>
+
   <!-- Visor 3D -->
   <div id="webgl-container"></div>
 
-  <!-- MENÚ LATERAL IZQUIERDO (Modelos - Inicia Oculto) -->
+  <!-- MENÚ LATERAL IZQUIERDO (Modelos - Oculto por defecto) -->
   <div id="sidebar" class="sidebar collapsed">
     <div class="sidebar-header">
       <h2 class="sidebar-title">Modelos</h2>
@@ -24,11 +41,9 @@
     </div>
   </div>
 
-  <!-- PANEL DERECHO (Especificaciones y Cámaras - Inicia Oculto) -->
+  <!-- PANEL DERECHO (Especificaciones y Cámaras - Oculto por defecto) -->
   <div id="specs-panel" class="carrusel-vertical collapsed">
-    <!-- Botón flotante derecho -->
     <button id="toggle-specs" class="icon-btn-right">📐</button>
-
     <div class="specs-content">
       <div class="titulo-carrusel">Especificaciones</div>
       <div id="lista-vistas-dinamica" class="lista-vistas"></div>
