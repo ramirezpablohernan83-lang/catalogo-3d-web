@@ -7,7 +7,10 @@ import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
 const container = document.querySelector('#webgl-container');
 const scene = new THREE.Scene();
 
-const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 100);
+const esMovil = window.innerHeight > window.innerWidth;
+const fovInicial = esMovil ? 60 : 45;
+
+const camera = new THREE.PerspectiveCamera(fovInicial, window.innerWidth / window.innerHeight, 0.1, 100);
 camera.position.set(0, 3, 6);
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -54,36 +57,36 @@ const specsPanel = document.getElementById('specs-panel');
 const toggleSpecsBtn = document.getElementById('toggle-specs');
 toggleSpecsBtn.addEventListener('click', () => specsPanel.classList.toggle('collapsed'));
 
-// 5. VARIABLES DE ANIMACIÓN POR TIEMPO UNIFORME Y MAPEO CÁMARA-COTA
+// 5. VARIABLES DE ANIMACIÓN Y TOLERANCIA DE MOVIMIENTO
 let modeloActual = null;
 let puntosInteres = [];
 let cotaActiva = null;
 
-// Control de animación basada en tiempo (duración constante para todos los modelos)
 let animandoCamara = false;
 let tiempoInicioAnimacion = 0;
-const duracionAnimacion = 1200; // Duración fija en milisegundos (1.2 segundos por transición)
+const duracionAnimacion = 1200;
 
 let posInicialCamara = new THREE.Vector3();
 let targetPosCamara = new THREE.Vector3();
 let focusInicialControls = new THREE.Vector3();
 let targetFocusControls = new THREE.Vector3();
 
-// Estado para desvanecimiento paulatino de cota (Fade Out)
+// Variables para controlar la tolerancia de movimiento libre
+let cotaFijadaActiva = false;
+let refCamPos = new THREE.Vector3();
+let refTargetPos = new THREE.Vector3();
+const TOLERANCIA_MOVIMIENTO = 1.2; 
+
 let desvanecerCotas = false;
 let opacidadCotas = 1.0;
 
-// Al interactuar manualmente, cancelamos cualquier transición en curso para dar libertad total
 controls.addEventListener('start', () => {
   if (animandoCamara) {
     animandoCamara = false;
   }
-  if (cotaActiva) {
-    desvanecerCotas = true;
-  }
 });
 
-// 6. CARGADOR DE MODELO .GLB Y MAPEO INTELIGENTE
+// 6. CARGADOR DE MODELO .GLB Y MAPEO INTELIGENTE (CON TARGETS DE BLENDER)
 const loader = new GLTFLoader();
 
 function cargarModelo(pathArchivo) {
@@ -94,18 +97,22 @@ function cargarModelo(pathArchivo) {
   puntosInteres = [];
   cotaActiva = null;
   animandoCamara = false;
+  cotaFijadaActiva = false;
 
   loader.load(pathArchivo, (gltf) => {
     modeloActual = gltf.scene;
     scene.add(modeloActual);
 
-    // Centrar el target de los controles automáticamente al centro del modelo cargado
+    // ¡CRUCIAL! Actualizamos la matriz del mundo para que Blender Empties entreguen posiciones reales
+    modeloActual.updateMatrixWorld(true);
+
     const box = new THREE.Box3().setFromObject(modeloActual);
     const center = box.getCenter(new THREE.Vector3());
     controls.target.copy(center);
     controls.update();
 
     const camarasEncontradas = [];
+    const targetsEncontrados = new Map();
     const cotasEncontradas = new Map();
 
     modeloActual.traverse((child) => {
@@ -114,8 +121,16 @@ function cargarModelo(pathArchivo) {
         camarasEncontradas.push(child);
       }
       
-      // 2. Detectar Mallas de Cotas
+      // 2. Detectar Targets invisibles en Blender (Ej: objetos vacíos nombrados 'Target_Fijacion')
       const nombreLower = child.name.toLowerCase();
+      if (nombreLower.includes('target_')) {
+        const worldPos = new THREE.Vector3();
+        child.getWorldPosition(worldPos);
+        const claveTarget = nombreLower.replace('target_', '').replace('.001', '');
+        targetsEncontrados.set(claveTarget, worldPos);
+      }
+
+      // 3. Detectar Mallas de Cotas
       if (nombreLower.includes('cota') || nombreLower.includes('medida')) {
         if (child.material) {
           child.material.transparent = true;
@@ -127,17 +142,29 @@ function cargarModelo(pathArchivo) {
       }
     });
 
-    // 3. Vincular cada Cámara con su Cota correspondiente
+    // 4. Vincular Cámaras, Targets y Cotas
     camarasEncontradas.forEach((cam) => {
-      const direccion = new THREE.Vector3(0, 0, -1);
-      direccion.applyQuaternion(cam.quaternion);
-
       const posicionCamara = cam.position.clone();
-      const puntoEnfoque = posicionCamara.clone().add(direccion.multiplyScalar(3));
-
       const nombreCamLower = cam.name.toLowerCase();
-      let cotaAsociada = null;
 
+      // Buscar si existe un Target específico en Blender para esta cámara
+      let puntoEnfoque = null;
+      for (let [clave, posTarget] of targetsEncontrados.entries()) {
+        if (nombreCamLower.includes(clave)) {
+          puntoEnfoque = posTarget.clone();
+          break;
+        }
+      }
+
+      // Respaldo por si la cámara no tiene un Target asignado
+      if (!puntoEnfoque) {
+        const direccion = new THREE.Vector3(0, 0, -1);
+        direccion.applyQuaternion(cam.quaternion);
+        puntoEnfoque = posicionCamara.clone().add(direccion.multiplyScalar(3));
+      }
+
+      // Buscar Cota asociada por nombre
+      let cotaAsociada = null;
       for (let [clave, meshCota] of cotasEncontradas.entries()) {
         if (nombreCamLower.includes(clave)) {
           cotaAsociada = meshCota;
@@ -185,23 +212,27 @@ window.seleccionarPuntoDeInteres = function(index) {
   const p = puntosInteres[index];
   if (!p) return;
 
-  // Ocultar cota activa anterior si existe
   if (cotaActiva && cotaActiva !== p.cota) {
     cotaActiva.visible = false;
     if (cotaActiva.material) cotaActiva.material.opacity = 0;
   }
 
-  // Configurar puntos de partida y llegada para la interpolación temporal
   posInicialCamara.copy(camera.position);
   focusInicialControls.copy(controls.target);
 
-  targetPosCamara.copy(p.posicion);
+  const posAjustada = p.posicion.clone();
+  if (window.innerHeight > window.innerWidth) {
+    const dirOffset = posAjustada.clone().sub(p.target).normalize();
+    posAjustada.add(dirOffset.multiplyScalar(0.8));
+  }
+
+  targetPosCamara.copy(posAjustada);
   targetFocusControls.copy(p.target);
 
   tiempoInicioAnimacion = performance.now();
   animandoCamara = true;
+  cotaFijadaActiva = false;
 
-  // Mostrar cota asociada
   if (p.cota) {
     cotaActiva = p.cota;
     cotaActiva.visible = true;
@@ -224,20 +255,17 @@ window.cambiarModelo = function(nombreModelo) {
   else if (nombreModelo === 'modelo3') cargarModelo('/assets/modelo3.glb');
 };
 
-// Cargar modelo inicial
 cargarModelo('/assets/modelo1.glb');
 
 // 8. BUCLE DE ANIMACIÓN
 function animate() {
   requestAnimationFrame(animate);
 
-  // Transición suave basada en tiempo real (Velocidad constante garantizada para cualquier modelo)
   if (animandoCamara) {
     const tiempoActual = performance.now();
     const progreso = (tiempoActual - tiempoInicioAnimacion) / duracionAnimacion;
 
     if (progreso < 1.0) {
-      // Función de suavizado easeInOut para que arranque y frene con elegancia
       const easeProgress = progreso < 0.5 ? 2 * progreso * progreso : 1 - Math.pow(-2 * progreso + 2, 2) / 2;
 
       camera.position.lerpVectors(posInicialCamara, targetPosCamara, easeProgress);
@@ -246,12 +274,25 @@ function animate() {
       camera.position.copy(targetPosCamara);
       controls.target.copy(targetFocusControls);
       animandoCamara = false;
+
+      if (cotaActiva) {
+        refCamPos.copy(camera.position);
+        refTargetPos.copy(controls.target);
+        cotaFijadaActiva = true;
+      }
     }
   }
 
-  // Fade-out paulatino de cota al orbitar
+  if (cotaFijadaActiva && cotaActiva && !animandoCamara) {
+    const distanciaMovida = camera.position.distanceTo(refCamPos) + controls.target.distanceTo(refTargetPos);
+    if (distanciaMovida > TOLERANCIA_MOVIMIENTO) {
+      desvanecerCotas = true;
+      cotaFijadaActiva = false;
+    }
+  }
+
   if (desvanecerCotas && cotaActiva && cotaActiva.material) {
-    opacidadCotas -= 0.03;
+    opacidadCotas -= 0.04;
     if (opacidadCotas <= 0) {
       opacidadCotas = 0;
       cotaActiva.visible = false;
@@ -269,6 +310,8 @@ animate();
 
 // RESPONSIVE
 window.addEventListener('resize', () => {
+  const esPantallaVertical = window.innerHeight > window.innerWidth;
+  camera.fov = esPantallaVertical ? 60 : 45;
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
