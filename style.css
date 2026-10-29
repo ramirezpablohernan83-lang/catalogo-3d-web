@@ -306,3 +306,31 @@ body, html {
   background: rgba(59, 130, 246, 0.3);
   border-color: #3b82f6;
 }
+
+/* --- ADAPTACION PARA CELULARES --- */
+@media (max-width: 600px) {
+  .sidebar {
+    width: min(260px, 78vw);
+  }
+
+  .sidebar.collapsed {
+    transform: translateX(-100%);
+  }
+
+  .sidebar-nav {
+    padding: 14px;
+  }
+
+  .sidebar-header {
+    padding: 16px;
+  }
+
+  .carrusel-vertical {
+    top: 10px;
+    right: 10px;
+  }
+
+  .lista-vistas {
+    max-height: 35vh;
+  }
+}
