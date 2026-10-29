@@ -1083,7 +1083,7 @@ window.addEventListener(
 
     camera.fov =
       esPantallaVertical
-        ? 60
+        ? 75
         : 45;
 
 
