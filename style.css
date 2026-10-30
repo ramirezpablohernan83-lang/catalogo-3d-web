@@ -346,3 +346,88 @@ body, html {
     max-height: 35vh;
   }
 }
+
+/* --- BOTÓN DE INSTALACIÓN (PWA) --- */
+.btn-instalar {
+  position: fixed;
+  left: 16px;
+  bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+  z-index: 40;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(15, 23, 42, 0.85);
+  backdrop-filter: blur(12px);
+  color: #f8fafc;
+  border: 1px solid rgba(96, 165, 250, 0.55);
+  padding: 11px 18px;
+  border-radius: 999px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  transition: background 0.2s ease, transform 0.1s ease;
+}
+
+.btn-instalar:hover {
+  background: rgba(59, 130, 246, 0.35);
+}
+
+.btn-instalar:active {
+  transform: scale(0.97);
+}
+
+/* El atributo hidden debe ganar al display del botón */
+.btn-instalar[hidden] {
+  display: none !important;
+}
+
+/* --- AVISO DE INSTALACIÓN EN iPHONE --- */
+.ios-aviso {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(10px);
+}
+
+.ios-aviso.oculto {
+  display: none;
+}
+
+.ios-aviso-card {
+  background: rgba(15, 23, 42, 0.96);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 20px;
+  padding: 26px 22px;
+  max-width: 420px;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.ios-aviso-card h3 {
+  color: #f8fafc;
+  font-size: 1.05rem;
+  font-weight: 600;
+}
+
+.ios-aviso-card ol {
+  color: #cbd5e1;
+  font-size: 0.88rem;
+  line-height: 1.6;
+  padding-left: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ios-aviso-card strong {
+  color: #93c5fd;
+}

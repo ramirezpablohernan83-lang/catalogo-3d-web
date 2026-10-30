@@ -4,6 +4,18 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Catálogo Técnico 3D Interactivo</title>
+  <meta name="description" content="Catálogo de productos en 3D con vistas técnicas, cotas y exploración interactiva." />
+
+  <!-- PWA -->
+  <link rel="manifest" href="/manifest.json" />
+  <meta name="theme-color" content="#0f172a" />
+  <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png" />
+  <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black" />
+  <meta name="apple-mobile-web-app-title" content="Catálogo 3D" />
+
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
@@ -17,7 +29,7 @@
       
       <!-- GIF de la rueda amplificado -->
       <div class="gesture-container">
-        <img src="/assets/rueda-360.gif" alt="Rotación 360" class="gif-rueda" />
+        <img src="/assets/rueda-360.webp" alt="Rotación 360" class="gif-rueda" />
         <span class="gesture-text">Desliza para rotar en 360°</span>
       </div>
 
@@ -47,6 +59,24 @@
     <div class="specs-content">
       <div class="titulo-carrusel">Especificaciones</div>
       <div id="lista-vistas-dinamica" class="lista-vistas"></div>
+    </div>
+  </div>
+
+  <!-- BOTÓN INSTALAR APP (PWA) -->
+  <button id="btn-instalar" class="btn-instalar" hidden>
+    ⬇️ Instalar app
+  </button>
+
+  <!-- INSTRUCCIONES PARA iPHONE -->
+  <div id="ios-aviso" class="ios-aviso oculto">
+    <div class="ios-aviso-card">
+      <h3>Instalar en iPhone / iPad</h3>
+      <ol>
+        <li>Toca el botón <strong>Compartir</strong> (el cuadro con la flecha ↑) en Safari.</li>
+        <li>Desliza la lista y elige <strong>Añadir a pantalla de inicio</strong>.</li>
+        <li>Toca <strong>Añadir</strong> arriba a la derecha.</li>
+      </ol>
+      <button id="cerrar-ios-aviso" class="btn-start">Entendido</button>
     </div>
   </div>
 

@@ -1334,3 +1334,137 @@ animate();
 // redimensionar(), registrado arriba junto al renderer.
 
 redimensionar();
+
+
+// ============================================================
+// 18. PWA (instalable en el móvil)
+// ============================================================
+
+// El Service Worker solo se activa en contextos seguros:
+// https:// o http://localhost. En una IP local (192.168.x.x)
+// sin HTTPS el navegador no lo registra y no habrá instalación.
+if ('serviceWorker' in navigator) {
+
+  window.addEventListener('load', () => {
+
+    navigator.serviceWorker
+      .register('/sw.js')
+      .then(() => {
+        console.log('📦 Service Worker activo.');
+      })
+      .catch((error) => {
+        console.warn('⚠️ Service Worker no registrado:', error);
+      });
+  });
+}
+
+
+// ------------------------------------------------------------
+// Botón "Instalar app"
+// ------------------------------------------------------------
+
+const btnInstalar = document.getElementById('btn-instalar');
+
+const avisoIos = document.getElementById('ios-aviso');
+
+const cerrarAvisoIos = document.getElementById('cerrar-ios-aviso');
+
+let eventoInstalacion = null;
+
+
+// ¿Ya se está usando como app instalada?
+function appYaInstalada() {
+
+  return (
+    window.matchMedia('(display-mode: standalone)').matches ||
+    window.navigator.standalone === true
+  );
+}
+
+
+// Safari en iOS no dispara beforeinstallprompt:
+// hay que mostrar instrucciones manuales.
+function esSafariIos() {
+
+  const ua = navigator.userAgent;
+
+  const esIos = /iphone|ipad|ipod/i.test(ua);
+
+  const esOtroNavegadorIos = /crios|fxios|edgios/i.test(ua);
+
+  return esIos && !esOtroNavegadorIos;
+}
+
+
+if (!appYaInstalada()) {
+
+  // Chrome / Edge / Android
+  window.addEventListener('beforeinstallprompt', (evento) => {
+
+    evento.preventDefault();
+
+    eventoInstalacion = evento;
+
+    btnInstalar.hidden = false;
+
+    console.log('📲 La app se puede instalar.');
+  });
+
+  // iPhone / iPad
+  if (esSafariIos()) {
+
+    btnInstalar.hidden = false;
+  }
+
+  btnInstalar.addEventListener('click', async () => {
+
+    if (eventoInstalacion) {
+
+      eventoInstalacion.prompt();
+
+      const eleccion = await eventoInstalacion.userChoice;
+
+      console.log('📲 Instalación:', eleccion.outcome);
+
+      eventoInstalacion = null;
+
+      if (eleccion.outcome === 'accepted') {
+
+        btnInstalar.hidden = true;
+      }
+
+      return;
+    }
+
+    // Sin prompt disponible (iPhone)
+    if (esSafariIos()) {
+
+      avisoIos.classList.remove('oculto');
+    }
+  });
+
+
+  cerrarAvisoIos.addEventListener('click', () => {
+
+    avisoIos.classList.add('oculto');
+  });
+
+  avisoIos.addEventListener('click', (evento) => {
+
+    if (evento.target === avisoIos) {
+
+      avisoIos.classList.add('oculto');
+    }
+  });
+
+
+  // Instalada con éxito
+  window.addEventListener('appinstalled', () => {
+
+    console.log('✅ App instalada.');
+
+    eventoInstalacion = null;
+
+    btnInstalar.hidden = true;
+  });
+}
