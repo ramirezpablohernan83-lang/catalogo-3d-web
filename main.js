@@ -82,7 +82,7 @@ controls.maxDistance = 15;
 controls.maxPolarAngle = Math.PI / 2 - 0.05;
 controls.minPolarAngle = 0.1;
 
-controls.enablePan = true;
+controls.enablePan = false;
 
 
 // ============================================================
@@ -1083,7 +1083,7 @@ window.addEventListener(
 
     camera.fov =
       esPantallaVertical
-        ? 150
+        ? 75
         : 45;
 
 
