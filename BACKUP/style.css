@@ -4,119 +4,333 @@
   box-sizing: border-box;
 }
 
-html, body {
+body, html {
   width: 100%;
   height: 100%;
   overflow: hidden;
-  font-family: system-ui, -apple-system, sans-serif;
-  background: #111;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  background-color: #000;
 }
 
-/* Contenedor del visor 3D (ocupa todo) */
-#viewer {
+#webgl-container {
+  width: 100vw;
+  height: 100vh;
   position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-}
-
-/* Canvas de Three.js */
-#viewer canvas {
-  display: block;
-  width: 100% !important;
-  height: 100% !important;
-}
-
-/* ========== PANEL LATERAL ========== */
-.sidebar {
-  position: fixed;
   top: 0;
   left: 0;
-  height: 100%;
-  width: 260px;
-  background: rgba(20, 20, 25, 0.72);   /* semitransparente */
+  z-index: 1;
+}
+
+/* --- TARJETA DE BIENVENIDA / OVERLAY --- */
+.welcome-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(0, 0, 0, 0.75);
   backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border-right: 1px solid rgba(255, 255, 255, 0.08);
-  z-index: 10;
+  z-index: 100;
   display: flex;
-  flex-direction: column;
-  transition: width 0.35s cubic-bezier(0.4, 0, 0.2, 1),
-              background 0.3s ease;
-  overflow: hidden;
-}
-
-/* Estado colapsado: solo queda una columna delgada */
-.sidebar.collapsed {
-  width: 52px;
-  background: rgba(20, 20, 25, 0.45);
-}
-
-/* Botón de toggle (siempre visible) */
-.toggle-btn {
-  width: 52px;
-  height: 52px;
-  border: none;
-  background: transparent;
-  color: #eee;
-  font-size: 1.4rem;
-  cursor: pointer;
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
   justify-content: center;
-  transition: background 0.2s;
+  align-items: center;
+  padding: 20px;
+  transition: opacity 0.5s ease, visibility 0.5s ease;
 }
 
-.toggle-btn:hover {
-  background: rgba(255, 255, 255, 0.1);
-}
-
-/* Contenido del menú (se oculta al colapsar) */
-.sidebar-content {
-  padding: 0 16px 24px;
-  opacity: 1;
-  transition: opacity 0.25s ease;
-  overflow: hidden;
-  white-space: nowrap;
-}
-
-.sidebar.collapsed .sidebar-content {
+.welcome-overlay.hidden {
   opacity: 0;
+  visibility: hidden;
   pointer-events: none;
 }
 
-.sidebar-content h2 {
-  color: #fff;
-  font-size: 1.1rem;
+/* Tarjeta más amplia y robusta */
+.welcome-card {
+  background: rgba(15, 23, 42, 0.94);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  padding: 34px 28px;
+  border-radius: 24px;
+  max-width: 440px; /* Aumentado de 340px a 440px */
+  width: 95%;
+  text-align: center;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.badge-industrial {
+  background: rgba(59, 130, 246, 0.2);
+  color: #60a5fa;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  padding: 5px 12px;
+  border-radius: 20px;
+  align-self: center;
+}
+
+.welcome-card h1 {
+  color: #f8fafc;
+  font-size: 1.35rem; /* Tipografía más amplia */
   font-weight: 600;
-  margin-bottom: 20px;
+  line-height: 1.3;
+}
+
+.welcome-card p {
+  color: #94a3b8;
+  font-size: 0.88rem;
+  line-height: 1.45;
+}
+
+/* CONTENEDOR Y GIF AGRANDADO */
+.gesture-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  margin: 8px 0;
+  background: rgba(255, 255, 255, 0.03);
+  padding: 16px;
+  border-radius: 16px;
+  border: 1px dashed rgba(255, 255, 255, 0.18);
+}
+
+/* GIF duplicado en tamaño */
+.gif-rueda {
+  width: 140px;  /* Aumentado de 70px a 140px */
+  height: 140px; /* Aumentado de 70px a 140px */
+  object-fit: contain;
+  border-radius: 16px;
+  background: rgba(0, 0, 0, 0.3);
+  padding: 6px;
+  box-shadow: inset 0 0 12px rgba(0, 0, 0, 0.5);
+}
+
+.gesture-text {
+  color: #cbd5e1;
+  font-size: 0.82rem;
+  font-weight: 500;
   letter-spacing: 0.02em;
 }
 
-/* Botones de los modelos */
-.model-btn {
-  display: block;
-  width: 100%;
-  padding: 12px 14px;
-  margin-bottom: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.15);
+.btn-start {
+  background: #3b82f6;
+  color: #fff;
+  border: none;
+  padding: 14px;
+  border-radius: 14px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s, transform 0.1s;
+  box-shadow: 0 4px 14px rgba(59, 130, 246, 0.4);
+}
+
+.btn-start:hover {
+  background: #2563eb;
+}
+
+.btn-start:active {
+  transform: scale(0.98);
+}
+
+/* --- MENÚ LATERAL IZQUIERDO (MODELOS) --- */
+.sidebar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 260px;
+  height: 100%;
+  background: rgba(15, 23, 42, 0.85);
+  backdrop-filter: blur(12px);
+  border-right: 1px solid rgba(255, 255, 255, 0.15);
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  transition: transform 0.3s ease-in-out;
+}
+
+.sidebar.collapsed {
+  transform: translateX(-260px);
+}
+
+.sidebar-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 20px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  position: relative;
+}
+
+.icon-btn {
+  background: rgba(15, 23, 42, 0.9);
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  font-size: 1.25rem;
+  cursor: pointer;
+  padding: 8px 12px;
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.06);
-  color: #e0e0e0;
-  font-size: 0.95rem;
+  position: absolute;
+  right: -50px;
+  top: 15px;
+  backdrop-filter: blur(8px);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+  transition: background 0.2s;
+  z-index: 21;
+}
+
+.icon-btn:hover {
+  background: rgba(59, 130, 246, 0.8);
+}
+
+.sidebar-title {
+  color: #f8fafc;
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin-left: 10px;
+}
+
+.sidebar-nav {
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.nav-item {
+  background: rgba(255, 255, 255, 0.05);
+  color: #cbd5e1;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 12px 16px;
+  border-radius: 10px;
   cursor: pointer;
   text-align: left;
-  transition: background 0.2s, border-color 0.2s, transform 0.15s;
+  font-size: 0.9rem;
+  font-weight: 500;
+  transition: all 0.2s ease;
 }
 
-.model-btn:hover {
-  background: rgba(255, 255, 255, 0.12);
-  border-color: rgba(255, 255, 255, 0.3);
-}
-
-.model-btn.active {
-  background: rgba(80, 140, 255, 0.25);
-  border-color: rgba(80, 140, 255, 0.6);
+.nav-item:hover, .nav-item.active {
+  background: rgba(59, 130, 246, 0.3);
+  border-color: #3b82f6;
   color: #fff;
+}
+
+/* --- PANEL DERECHO (ESPECIFICACIONES / CÁMARAS) --- */
+.carrusel-vertical {
+  position: absolute;
+  top: 15px;
+  right: 15px;
+  z-index: 10;
+  display: flex;
+  align-items: flex-start;
+  transition: transform 0.3s ease-in-out;
+}
+
+.carrusel-vertical.collapsed {
+  transform: translateX(220px);
+}
+
+.specs-content {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  background: rgba(15, 23, 42, 0.85);
+  backdrop-filter: blur(12px);
+  padding: 12px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+  width: 190px;
+}
+
+.icon-btn-right {
+  background: rgba(15, 23, 42, 0.9);
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  font-size: 1.1rem;
+  cursor: pointer;
+  padding: 8px 10px;
+  border-radius: 8px;
+  position: absolute;
+  left: -48px;
+  top: 0;
+  backdrop-filter: blur(8px);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+  transition: background 0.2s;
+  z-index: 11;
+}
+
+.icon-btn-right:hover {
+  background: rgba(59, 130, 246, 0.8);
+}
+
+.titulo-carrusel {
+  color: #94a3b8;
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding-left: 2px;
+  margin-bottom: 2px;
+}
+
+.lista-vistas {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  overflow-y: auto;
+  max-height: 45vh;
+}
+
+.btn-vista-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: rgba(255, 255, 255, 0.05);
+  color: #f8fafc;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 8px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 0.75rem;
+  font-weight: 500;
+  white-space: nowrap;
+  transition: all 0.2s ease-in-out;
+}
+
+.btn-vista-item:hover {
+  background: rgba(59, 130, 246, 0.3);
+  border-color: #3b82f6;
+}
+
+/* --- ADAPTACION PARA CELULARES --- */
+@media (max-width: 600px) {
+  .sidebar {
+    width: min(260px, 78vw);
+  }
+
+  .sidebar.collapsed {
+    transform: translateX(-100%);
+  }
+
+  .sidebar-nav {
+    padding: 14px;
+  }
+
+  .sidebar-header {
+    padding: 16px;
+  }
+
+  .carrusel-vertical {
+    top: 10px;
+    right: 10px;
+  }
+
+  .lista-vistas {
+    max-height: 35vh;
+  }
 }

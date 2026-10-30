@@ -3,41 +3,51 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Catálogo 3D</title>
+  <title>Catálogo Técnico 3D Interactivo</title>
   <link rel="stylesheet" href="style.css" />
-
-  <!-- Import map para Three.js -->
-  <script type="importmap">
-  {
-    "imports": {
-      "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
-      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
-    }
-  }
-  </script>
 </head>
 <body>
-  <!-- Panel lateral -->
-  <aside id="sidebar" class="sidebar">
-    <button id="toggle-btn" class="toggle-btn" title="Mostrar / ocultar menú">
-      ☰
-    </button>
 
-    <div class="sidebar-content">
-      <h2>Catálogo</h2>
-      <button class="model-btn" data-model="modelo1.glb">Objeto 1</button>
-      <button class="model-btn" data-model="modelo2.glb">Objeto 2</button>
-      <button class="model-btn" data-model="modelo3.glb">Objeto 3</button>
+  <!-- PANTALLA / TARJETA DE BIENVENIDA MÁS AMPLIA -->
+  <div id="welcome-overlay" class="welcome-overlay">
+    <div class="welcome-card">
+      <span class="badge-industrial">Catálogo de Ingeniería 3D</span>
+      <h1 id="product-title">Llanta Industrial de Alta Resistencia</h1>
+      <p id="product-desc">Inspección técnica detallada, cotas normalizadas y visualización interactiva en 360°.</p>
+      
+      <!-- GIF de la rueda amplificado -->
+      <div class="gesture-container">
+        <img src="/assets/rueda-360.gif" alt="Rotación 360" class="gif-rueda" />
+        <span class="gesture-text">Desliza para rotar en 360°</span>
+      </div>
+
+      <button id="btn-start" class="btn-start" onclick="cerrarBienvenida()">Explorar Modelo</button>
     </div>
-  </aside>
+  </div>
 
-  <!-- Contenedor del canvas 3D -->
-  <div id="viewer"></div>
+  <!-- Visor 3D -->
+  <div id="webgl-container"></div>
 
-  <!-- Indicador de carga -->
-  <div id="loader" class="loader">
-    <div class="spinner"></div>
-    <p>Cargando modelo...</p>
+  <!-- MENÚ LATERAL IZQUIERDO (Modelos - Oculto por defecto) -->
+  <div id="sidebar" class="sidebar collapsed">
+    <div class="sidebar-header">
+      <h2 class="sidebar-title">Modelos</h2>
+      <button id="toggle-sidebar" class="icon-btn">☰</button>
+    </div>
+    <div class="sidebar-nav">
+      <button class="nav-item active" onclick="cambiarModelo('modelo1')">Disco / Llanta 1</button>
+      <button class="nav-item" onclick="cambiarModelo('modelo2')">Disco / Llanta 2</button>
+      <button class="nav-item" onclick="cambiarModelo('modelo3')">Disco / Llanta 3</button>
+    </div>
+  </div>
+
+  <!-- PANEL DERECHO (Especificaciones y Cámaras - Oculto por defecto) -->
+  <div id="specs-panel" class="carrusel-vertical collapsed">
+    <button id="toggle-specs" class="icon-btn-right">📐</button>
+    <div class="specs-content">
+      <div class="titulo-carrusel">Especificaciones</div>
+      <div id="lista-vistas-dinamica" class="lista-vistas"></div>
+    </div>
   </div>
 
   <script type="module" src="main.js"></script>

@@ -11,24 +11,93 @@ import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
 const container = document.querySelector('#webgl-container');
 const scene = new THREE.Scene();
 
-const esMovil = window.innerHeight > window.innerWidth;
-const fovInicial = esMovil ? 60 : 45;
+// FOV vertical de referencia (paisaje).
+// En pantallas verticales el FOV se abre solo lo necesario
+// para no perder campo de visión horizontal.
+const FOV_BASE = 45;
+const FOV_HORIZONTAL_MINIMO = 50;
+const FOV_VERTICAL_MAXIMO = 70;
 
-const camera = new THREE.PerspectiveCamera(
-  fovInicial,
-  window.innerWidth / window.innerHeight,
-  0.1,
-  100
-);
+const camera = new THREE.PerspectiveCamera(FOV_BASE, 1, 0.1, 100);
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 
-renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.0;
 
 container.appendChild(renderer.domElement);
+
+
+// ------------------------------------------------------------
+// FOV vertical que garantiza un mínimo de campo horizontal.
+// ------------------------------------------------------------
+
+function calcularFovVertical(aspecto) {
+
+  const medioH =
+    Math.tan(THREE.MathUtils.degToRad(FOV_BASE) / 2) * aspecto;
+
+  const medioHMinimo =
+    Math.tan(THREE.MathUtils.degToRad(FOV_HORIZONTAL_MINIMO) / 2);
+
+  let fov = FOV_BASE;
+
+  if (medioH < medioHMinimo) {
+
+    fov = THREE.MathUtils.radToDeg(
+      2 * Math.atan(medioHMinimo / aspecto)
+    );
+  }
+
+  return Math.min(fov, FOV_VERTICAL_MAXIMO);
+}
+
+
+// ------------------------------------------------------------
+// Redimensionado: siempre a partir del tamaño REAL del
+// contenedor (no de window.innerWidth/innerHeight).
+// ------------------------------------------------------------
+
+function redimensionar() {
+
+  const ancho = container.clientWidth || window.innerWidth;
+
+  const alto = container.clientHeight || window.innerHeight;
+
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+
+  renderer.setSize(ancho, alto, false);
+
+  camera.aspect = ancho / alto;
+
+  camera.fov = calcularFovVertical(camera.aspect);
+
+  camera.updateProjectionMatrix();
+
+  // Si el usuario todavía no ha girado la vista,
+  // reencuadramos para la nueva relación de aspecto.
+  if (typeof aplicarVistaReferencia === 'function') {
+
+    aplicarVistaReferencia();
+  }
+}
+
+window.addEventListener('resize', redimensionar);
+
+window.addEventListener('orientationchange', () => {
+
+  // El navegador tarda un instante en reportar el nuevo tamaño.
+  setTimeout(redimensionar, 250);
+});
+
+if (window.visualViewport) {
+
+  window.visualViewport.addEventListener(
+    'resize',
+    redimensionar
+  );
+}
 
 
 // ============================================================
@@ -83,6 +152,83 @@ controls.maxPolarAngle = Math.PI / 2 - 0.05;
 controls.minPolarAngle = 0.1;
 
 controls.enablePan = false;
+
+
+// ============================================================
+// 4.1 ENCUADRE INDEPENDIENTE DEL DISPOSITIVO
+// ============================================================
+
+// Relación de aspecto con la que se compuso la escena en
+// Blender (referencia). En cualquier otra pantalla se corrige
+// la distancia de forma proporcional, sin trucos fijos.
+const ASPECTO_REFERENCIA = 16 / 9;
+const FOV_REFERENCIA = 45;
+const MARGEN_ENCUADRE = 1.05;
+
+let focoActual = new THREE.Vector3();
+let dirActual = new THREE.Vector3(0, 0.45, 1).normalize();
+let distanciaReferencia = 6;
+let radioActual = 1;
+let vistaLista = false;
+let usuarioInteractuo = false;
+
+
+// Ángulo de apertura efectivo (el más restrictivo entre
+// vertical y horizontal) para una cámara dada.
+function fovEfectivo(fovVertical, aspecto) {
+
+  const fovV = THREE.MathUtils.degToRad(fovVertical);
+
+  const fovH = 2 * Math.atan(Math.tan(fovV / 2) * aspecto);
+
+  return Math.min(fovV, fovH);
+}
+
+
+// Cuánto hay que alejar la cámara respecto al encuadre de
+// referencia (1 = idéntico a Blender en 16:9).
+function factorEncuadre() {
+
+  const referencia =
+    Math.sin(fovEfectivo(FOV_REFERENCIA, ASPECTO_REFERENCIA) / 2);
+
+  const actual =
+    Math.sin(fovEfectivo(camera.fov, camera.aspect) / 2);
+
+  return referencia / actual;
+}
+
+
+// Distancia mínima para que el producto quepa entero.
+function distanciaMinimaVisible() {
+
+  const medio = fovEfectivo(camera.fov, camera.aspect) / 2;
+
+  return (radioActual / Math.sin(medio)) * MARGEN_ENCUADRE;
+}
+
+
+function distanciaVista() {
+
+  return Math.max(
+    distanciaReferencia * factorEncuadre(),
+    distanciaMinimaVisible()
+  );
+}
+
+
+function aplicarVistaReferencia() {
+
+  if (!vistaLista) return;
+
+  camera.position
+    .copy(focoActual)
+    .addScaledVector(dirActual, distanciaVista());
+
+  controls.target.copy(focoActual);
+
+  controls.update();
+}
 
 
 // ============================================================
@@ -160,6 +306,8 @@ controls.addEventListener('start', () => {
 
   window.cerrarBienvenida();
 
+  usuarioInteractuo = true;
+
   if (animandoCamara) {
     animandoCamara = false;
   }
@@ -170,6 +318,58 @@ controls.addEventListener('start', () => {
 // ============================================================
 // 10. CARGADOR GLB
 // ============================================================
+
+// Caja envolvente calculada SOLO con la geometría visible.
+//
+// Box3.setFromObject() incluye los objetos ocultos (cotas,
+// líneas de medida, etc.). Como esas cotas suelen estar
+// desplazadas a un lado del producto, su centro dejaba de
+// coincidir con el centro real: la cámara apuntaba al lado
+// y el modelo aparecía corrido, sobre todo en vertical.
+function calcularCajaVisible(raiz) {
+
+  const caja = new THREE.Box3();
+
+  const cajaParcial = new THREE.Box3();
+
+  raiz.updateMatrixWorld(true);
+
+  raiz.traverse((objeto) => {
+
+    if (!objeto.isMesh || !objeto.geometry) return;
+
+    // Comprobar también los padres (grupos ocultos)
+    let visible = true;
+
+    let padre = objeto;
+
+    while (padre) {
+
+      if (padre.visible === false) {
+        visible = false;
+        break;
+      }
+
+      padre = padre.parent;
+    }
+
+    if (!visible) return;
+
+    if (!objeto.geometry.boundingBox) {
+
+      objeto.geometry.computeBoundingBox();
+    }
+
+    cajaParcial
+      .copy(objeto.geometry.boundingBox)
+      .applyMatrix4(objeto.matrixWorld);
+
+    caja.union(cajaParcial);
+  });
+
+  return caja;
+}
+
 
 const loader = new GLTFLoader();
 
@@ -213,23 +413,6 @@ function cargarModelo(pathArchivo) {
       scene.add(modeloActual);
 
       modeloActual.updateMatrixWorld(true);
-
-
-      // ------------------------------------------------------
-      // CALCULAR CENTRO Y TAMAÑO DEL MODELO
-      // ------------------------------------------------------
-
-      const box = new THREE.Box3().setFromObject(modeloActual);
-
-      const boxCenter = box.getCenter(
-        new THREE.Vector3()
-      );
-
-      const sphere = new THREE.Sphere();
-
-      box.getBoundingSphere(sphere);
-
-      const radioModelo = sphere.radius;
 
 
       // ------------------------------------------------------
@@ -356,6 +539,59 @@ function cargarModelo(pathArchivo) {
         }
 
       });
+
+
+      // ------------------------------------------------------
+      // CALCULAR CENTRO Y TAMAÑO DEL MODELO
+      // (ya con las cotas ocultas, así que no cuentan)
+      // ------------------------------------------------------
+
+      const boxCompleta = new THREE.Box3().setFromObject(modeloActual);
+
+      const box = calcularCajaVisible(modeloActual);
+
+      if (box.isEmpty()) {
+        box.copy(boxCompleta);
+      }
+
+      const boxCenter = box.getCenter(
+        new THREE.Vector3()
+      );
+
+      const sphere = new THREE.Sphere();
+
+      box.getBoundingSphere(sphere);
+
+      const radioModelo = sphere.radius;
+
+
+      // Diagnóstico: si el centro "con cotas" está lejos del
+      // centro real, era justo lo que descuadraba la vista.
+      const centroCompleto = boxCompleta.getCenter(
+        new THREE.Vector3()
+      );
+
+      if (centroCompleto.distanceTo(boxCenter) > radioModelo * 0.02) {
+
+        console.info(
+          '🧭 La caja con objetos ocultos (cotas) estaba desplazada:',
+          centroCompleto,
+          '→ centro real:',
+          boxCenter
+        );
+      }
+
+
+      // La cámara se adapta al tamaño real del producto
+      camera.near = Math.max(radioModelo / 100, 0.01);
+
+      camera.far = radioModelo * 100;
+
+      camera.updateProjectionMatrix();
+
+      controls.minDistance = radioModelo * 0.6;
+
+      controls.maxDistance = radioModelo * 12;
 
 
       // ======================================================
@@ -605,22 +841,50 @@ function cargarModelo(pathArchivo) {
           puntosInteres[0];
 
 
-        camera.position.copy(
-          vistaInicial.posicion
-        );
+        // Guardamos el encuadre de referencia TAL COMO lo
+        // compusiste en Blender: ángulo y distancia reales.
+        const dir = vistaInicial.posicion
+          .clone()
+          .sub(vistaInicial.target);
+
+        const distanciaBlender = dir.length();
+
+        if (distanciaBlender < 1e-4) {
+
+          dir.set(0, 0.45, 1);
+
+        }
+
+        dir.normalize();
 
 
-        controls.target.copy(
-          vistaInicial.target
-        );
+        focoActual.copy(vistaInicial.target);
+
+        dirActual.copy(dir);
+
+        radioActual = radioModelo;
+
+        distanciaReferencia =
+          distanciaBlender > 1e-4
+            ? distanciaBlender
+            : radioModelo * 2.5;
 
 
-        controls.update();
+        vistaLista = true;
+
+        usuarioInteractuo = false;
+
+        aplicarVistaReferencia();
 
 
         console.log(
           '🚀 Vista inicial:',
           vistaInicial.nombre
+        );
+
+        console.log(
+          '📏 Factor de encuadre:',
+          factorEncuadre().toFixed(3)
         );
 
       } else {
@@ -629,38 +893,27 @@ function cargarModelo(pathArchivo) {
         // VISTA AUTOMÁTICA DE EMERGENCIA
         // ----------------------------------------------------
 
-        controls.target.copy(
-          boxCenter
-        );
+        focoActual.copy(boxCenter);
+
+        dirActual.set(0, 0.45, 1).normalize();
+
+        radioActual = radioModelo;
+
+        distanciaReferencia =
+          (radioModelo /
+            Math.sin(
+              fovEfectivo(
+                FOV_REFERENCIA,
+                ASPECTO_REFERENCIA
+              ) / 2
+            )) * 1.15;
 
 
-        const fovRad =
-          (camera.fov * Math.PI) / 180;
+        vistaLista = true;
 
+        usuarioInteractuo = false;
 
-        let distanciaIdeal =
-          radioModelo /
-          Math.sin(fovRad / 2);
-
-
-        distanciaIdeal *= 1.4;
-
-
-        camera.position.copy(
-          boxCenter
-        );
-
-
-        camera.position.add(
-          new THREE.Vector3(
-            0,
-            radioModelo * 0.5,
-            distanciaIdeal
-          )
-        );
-
-
-        controls.update();
+        aplicarVistaReferencia();
 
 
         console.log(
@@ -825,30 +1078,35 @@ window.seleccionarPuntoDeInteres =
     // Posición destino
     // --------------------------------------------------------
 
-    const posAjustada =
-      p.posicion.clone();
+    // Se conserva el encuadre de Blender y solo se corrige
+    // la distancia según la relación de aspecto actual
+    // (vertical de móvil = se aleja, horizontal = igual).
+    const factorPantalla = factorEncuadre();
 
-
-    // En móvil damos un pequeño alejamiento
-    // para las vistas técnicas.
-
-    if (
-      !p.esLibre &&
-      window.innerHeight > window.innerWidth
-    ) {
-
-      const dirOffset =
-        posAjustada
+    const posAjustada = p.target
+      .clone()
+      .add(
+        p.posicion
           .clone()
           .sub(p.target)
-          .normalize();
-
-
-      posAjustada.add(
-        dirOffset.multiplyScalar(0.8)
+          .multiplyScalar(factorPantalla)
       );
 
-    }
+
+    // Recordar esta vista para poder reencuadrarla
+    // si el usuario gira el teléfono.
+    focoActual.copy(p.target);
+
+    dirActual.copy(p.posicion).sub(p.target).normalize();
+
+    distanciaReferencia = Math.max(
+      p.posicion.distanceTo(p.target),
+      1e-4
+    );
+
+    vistaLista = true;
+
+    usuarioInteractuo = false;
 
 
     // --------------------------------------------------------
@@ -1072,33 +1330,7 @@ animate();
 // 17. RESPONSIVE
 // ============================================================
 
-window.addEventListener(
-  'resize',
-  () => {
+// El resize y el cambio de orientación se gestionan desde
+// redimensionar(), registrado arriba junto al renderer.
 
-    const esPantallaVertical =
-      window.innerHeight >
-      window.innerWidth;
-
-
-    camera.fov =
-      esPantallaVertical
-        ? 75
-        : 45;
-
-
-    camera.aspect =
-      window.innerWidth /
-      window.innerHeight;
-
-
-    camera.updateProjectionMatrix();
-
-
-    renderer.setSize(
-      window.innerWidth,
-      window.innerHeight
-    );
-
-  }
-);
+redimensionar();
