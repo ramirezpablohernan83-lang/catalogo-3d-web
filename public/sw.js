@@ -9,7 +9,7 @@
    Si no, el móvil seguirá mostrando la copia en caché.
    ============================================================ */
 
-const VERSION = 'catalogo-3d-v2';
+const VERSION = 'catalogo-3d-v3.5';
 
 const CACHE_APP = `${VERSION}-app`;
 const CACHE_ASSETS = `${VERSION}-assets`;
