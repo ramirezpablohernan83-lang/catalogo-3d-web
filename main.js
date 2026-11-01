@@ -371,6 +371,40 @@ function calcularCajaVisible(raiz) {
 }
 
 
+// Lee una Custom Property de Blender exportada en el .glb.
+// Blender la guarda en "extras" y three la expone en userData.
+function leerPropiedadTexto(objeto, clave) {
+
+  if (!objeto) return '';
+
+  const datos = objeto.userData || {};
+
+  let valor = datos[clave];
+
+  if (valor === undefined) valor = datos['_' + clave];
+
+  if (valor === undefined) valor = datos[clave.toUpperCase()];
+
+  if (typeof valor === 'string') return valor.trim();
+
+  if (typeof valor === 'number') return String(valor);
+
+  return '';
+}
+
+
+// CAM_01__Fijacion_del_rin  →  "Fijacion del rin"
+function nombreVisibleDeCamara(nombre) {
+
+  return (
+    String(nombre).split('__')[1] ||
+    String(nombre)
+  )
+    .replace(/_/g, ' ')
+    .trim();
+}
+
+
 const loader = new GLTFLoader();
 
 
@@ -395,6 +429,10 @@ function cargarModelo(pathArchivo) {
   cotaActiva = null;
 
   animandoCamara = false;
+
+  tarjetaActiva = null;
+
+  ocultarTarjeta();
 
 
   // Cargar GLB
@@ -464,7 +502,14 @@ function cargarModelo(pathArchivo) {
 
           targetsEncontrados.set(
             numeroTarget,
-            worldPos
+            {
+              posicion: worldPos,
+
+              // Texto editable desde Blender (Custom Properties)
+              info: leerPropiedadTexto(child, 'info'),
+
+              titulo: leerPropiedadTexto(child, 'titulo')
+            }
           );
 
           console.log(
@@ -671,15 +716,15 @@ function cargarModelo(pathArchivo) {
         // BUSCAR TARGET EXACTO
         // ----------------------------------------------------
 
-        let puntoEnfoque =
-          targetsEncontrados
-            .get(numeroCamara);
+        const datosTarget =
+          targetsEncontrados.get(numeroCamara);
+
+        let puntoEnfoque = datosTarget
+          ? datosTarget.posicion.clone()
+          : null;
 
 
         if (puntoEnfoque) {
-
-          puntoEnfoque =
-            puntoEnfoque.clone();
 
           console.log(
             `🔗 ${nombreCam} → TARGET_${numeroCamara} ✓`
@@ -730,6 +775,24 @@ function cargarModelo(pathArchivo) {
 
 
         // ----------------------------------------------------
+        // TEXTO DE LA TARJETA
+        //
+        // 1) Custom Property "info" del TARGET_XX  (recomendado)
+        // 2) Custom Property "info" de la cámara CAM_XX
+        // 3) vacío → no se muestra tarjeta
+        // ----------------------------------------------------
+
+        const infoTarjeta =
+          (datosTarget && datosTarget.info) ||
+          leerPropiedadTexto(cam, 'info');
+
+        const tituloTarjeta =
+          (datosTarget && datosTarget.titulo) ||
+          leerPropiedadTexto(cam, 'titulo') ||
+          nombreVisibleDeCamara(cam.name);
+
+
+        // ----------------------------------------------------
         // BUSCAR COTA ASOCIADA
         // ----------------------------------------------------
 
@@ -768,6 +831,10 @@ function cargarModelo(pathArchivo) {
 
           cota: cotaAsociada,
 
+          info: infoTarjeta,
+
+          titulo: tituloTarjeta,
+
           esLibre: false
 
         });
@@ -803,6 +870,10 @@ function cargarModelo(pathArchivo) {
           target: boxCenter.clone(),
 
           cota: null,
+
+          info: '',
+
+          titulo: '',
 
           esLibre: true
 
@@ -1109,6 +1180,24 @@ window.seleccionarPuntoDeInteres =
     usuarioInteractuo = false;
 
 
+    // Distancia real de esta vista en esta pantalla.
+    //
+    // OJO: OrbitControls limita la distancia a [minDistance,
+    // maxDistance]. Si el encuadre de Blender es más cercano
+    // que minDistance, la cámara termina más lejos de lo que
+    // dice posAjustada. Usamos la distancia ya limitada, que
+    // es donde la cámara va a quedar de verdad.
+    p.distanciaVista = THREE.MathUtils.clamp(
+      posAjustada.distanceTo(p.target),
+      controls.minDistance,
+      controls.maxDistance
+    );
+
+
+    // Mostrar (o no) la tarjeta del punto seleccionado
+    mostrarTarjeta(p);
+
+
     // --------------------------------------------------------
     // Guardar destinos
     // --------------------------------------------------------
@@ -1217,6 +1306,146 @@ window.cambiarModelo =
 
 
 // ============================================================
+// 14.1 TARJETA DE INFORMACIÓN DEL PUNTO DE INTERÉS
+// ============================================================
+
+const tarjetaInfo = document.getElementById('tarjeta-info');
+
+const anclaInfo = document.getElementById('ancla-info');
+
+const tarjetaTitulo = tarjetaInfo.querySelector('.tarjeta-info-titulo');
+
+const tarjetaTexto = tarjetaInfo.querySelector('.tarjeta-info-texto');
+
+// Punto cuya tarjeta está visible (null = ninguna)
+let tarjetaActiva = null;
+
+const _proyeccion = new THREE.Vector3();
+
+// Fundido según la distancia a la vista seleccionada:
+// empieza a desvanecerse al 125 % y desaparece al 170 %.
+const UMBRAL_CERCANO = 1.25;
+const UMBRAL_LEJOS = 1.7;
+
+// Separación de la tarjeta respecto al punto (en píxeles)
+const SEPARACION_TARJETA = 18;
+
+
+function ocultarTarjeta() {
+
+  tarjetaInfo.style.opacity = 0;
+
+  anclaInfo.style.opacity = 0;
+}
+
+
+function mostrarTarjeta(punto) {
+
+  tarjetaActiva = punto && punto.info ? punto : null;
+
+  if (!tarjetaActiva) {
+
+    ocultarTarjeta();
+
+    return;
+  }
+
+  tarjetaTitulo.textContent = punto.titulo || '';
+
+  tarjetaTitulo.style.display = punto.titulo ? 'block' : 'none';
+
+  // textContent: el texto viene del .glb, nunca innerHTML
+  tarjetaTexto.textContent = punto.info;
+
+  actualizarTarjeta();
+}
+
+
+function actualizarTarjeta() {
+
+  if (!tarjetaActiva) return;
+
+  const ancho = container.clientWidth;
+
+  const alto = container.clientHeight;
+
+
+  // Punto 3D → coordenadas de pantalla
+  _proyeccion
+    .copy(tarjetaActiva.target)
+    .project(camera);
+
+
+  const x = (_proyeccion.x * 0.5 + 0.5) * ancho;
+
+  const y = (-_proyeccion.y * 0.5 + 0.5) * alto;
+
+
+  // Fundido por distancia
+  const distancia =
+    camera.position.distanceTo(tarjetaActiva.target);
+
+  const referencia =
+    tarjetaActiva.distanciaVista || distancia;
+
+  const opacidad =
+    1 - THREE.MathUtils.smoothstep(
+      distancia,
+      referencia * UMBRAL_CERCANO,
+      referencia * UMBRAL_LEJOS
+    );
+
+
+  const fueraDePantalla =
+    _proyeccion.z > 1 ||
+    x < 0 || x > ancho ||
+    y < 0 || y > alto;
+
+
+  if (fueraDePantalla || opacidad < 0.02) {
+
+    ocultarTarjeta();
+
+    return;
+  }
+
+
+  // Posición de la tarjeta: a la derecha del punto y, si no
+  // entra en pantalla, se abre hacia la izquierda.
+  const anchoTarjeta = tarjetaInfo.offsetWidth;
+
+  const altoTarjeta = tarjetaInfo.offsetHeight;
+
+  const margen = 8;
+
+  const aLaDerecha =
+    x + SEPARACION_TARJETA + anchoTarjeta <= ancho - margen;
+
+  const xTarjeta = aLaDerecha
+    ? x + SEPARACION_TARJETA
+    : x - SEPARACION_TARJETA - anchoTarjeta;
+
+  // Que tampoco se salga por arriba ni por abajo
+  const yTarjeta = THREE.MathUtils.clamp(
+    y - 12,
+    margen,
+    Math.max(margen, alto - altoTarjeta - margen)
+  );
+
+  tarjetaInfo.style.transform =
+    `translate3d(${xTarjeta}px, ${yTarjeta}px, 0)`;
+
+  tarjetaInfo.style.opacity = opacidad;
+
+
+  anclaInfo.style.transform =
+    `translate3d(${x}px, ${y}px, 0)`;
+
+  anclaInfo.style.opacity = opacidad;
+}
+
+
+// ============================================================
 // 15. CARGAR MODELO INICIAL
 // ============================================================
 
@@ -1309,6 +1538,13 @@ function animate() {
   // ----------------------------------------------------------
 
   controls.update();
+
+
+  // ----------------------------------------------------------
+  // Tarjeta del punto de interés
+  // ----------------------------------------------------------
+
+  actualizarTarjeta();
 
 
   // ----------------------------------------------------------
