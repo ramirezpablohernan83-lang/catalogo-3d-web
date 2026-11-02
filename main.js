@@ -448,6 +448,8 @@ function cargarModelo(pathArchivo) {
 
   ocultarTarjeta();
 
+  limpiarRecorrido();
+
 
   // Cargar GLB
   loader.load(
@@ -474,6 +476,9 @@ function cargarModelo(pathArchivo) {
       const camarasRegulares = [];
 
       let camaraLibreObjeto = null;
+
+      // Nodo "CURVA" que define el carril de recorrido
+      let nodoCurva = null;
 
       const targetsEncontrados = new Map();
 
@@ -567,6 +572,26 @@ function cargarModelo(pathArchivo) {
               'numérica. Cambiala a String en Blender.'
             );
           }
+        }
+
+
+        // ----------------------------------------------------
+        // CURVA DE RECORRIDO
+        //
+        // CURVA
+        //
+        // En Blender es una curva, pero dentro del .glb viaja
+        // como líneas (hay que exportar con "Loose Edges").
+        // ----------------------------------------------------
+
+        if (/^CURVA(?:$|[._])/.test(nombre)) {
+
+          nodoCurva = child;
+
+          // El carril es solo una guía: no se dibuja
+          child.visible = false;
+
+          console.log('🛤️ CURVA detectada');
         }
 
 
@@ -691,6 +716,10 @@ function cargarModelo(pathArchivo) {
       controls.maxDistance = radioModelo * 12;
 
 
+      // Preparar el recorrido por la CURVA (si existe)
+      prepararRecorrido(nodoCurva, boxCenter);
+
+
       // ======================================================
       // MOSTRAR RESUMEN DE LO ENCONTRADO
       // ======================================================
@@ -722,6 +751,11 @@ function cargarModelo(pathArchivo) {
       console.log(
         'CAM_LIBRE:',
         camaraLibreObjeto ? '✓' : '✗'
+      );
+
+      console.log(
+        'Curva de recorrido:',
+        recorrido.segmentos.length ? '✓' : '✗'
       );
 
       console.log('--------------------------------------');
@@ -1391,6 +1425,15 @@ function ocultarTarjeta() {
 }
 
 
+// La vista ya no corresponde a un punto de interés
+function cancelarTarjeta() {
+
+  tarjetaActiva = null;
+
+  ocultarTarjeta();
+}
+
+
 function mostrarTarjeta(punto) {
 
   tarjetaActiva = punto && punto.info ? punto : null;
@@ -1495,6 +1538,719 @@ function actualizarTarjeta() {
 
   anclaInfo.style.opacity = opacidad;
 }
+
+
+// ============================================================
+// 14.2 RECORRIDO LATERAL POR LA CURVA "CURVA"
+//
+// La curva es el carril de la cámara. Se recorre:
+//   · en PC: arrastrando con el botón central del mouse
+//   · en móvil: arrastrando con dos dedos
+//
+// La curva se exporta como líneas (Blender → Loose Edges)
+// y se lee desde el .glb, así que no hay que tocar código
+// para cambiarla: se edita en Blender y listo.
+// ============================================================
+
+const recorrido = {
+
+  puntos: [],
+
+  segmentos: [],
+
+  longitud: 0,
+
+  cerrada: false,
+
+  posicion: 0,
+
+  centro: new THREE.Vector3()
+};
+
+// Cuánto avanza por píxel arrastrado (1 = natural)
+const SENSIBILIDAD_RECORRIDO = 1;
+
+// 1 = arrastrar a la derecha avanza en el sentido de la
+// curva. Si te queda al revés, poné -1.
+const DIRECCION_RECORRIDO = 1;
+
+// Punteros apoyados (para el gesto de dos dedos)
+const punterosRecorrido = new Map();
+
+// 'raton' | 'tactil' | null
+let modoRecorrido = null;
+
+let ultimoXRecorrido = 0;
+
+
+function limpiarRecorrido() {
+
+  recorrido.puntos = [];
+
+  recorrido.segmentos = [];
+
+  recorrido.longitud = 0;
+
+  recorrido.cerrada = false;
+
+  recorrido.posicion = 0;
+
+  recorrido.centro.set(0, 0, 0);
+
+  // Sin carril, el botón central vuelve a hacer zoom
+  controls.mouseButtons.MIDDLE = THREE.MOUSE.DOLLY;
+}
+
+
+// ------------------------------------------------------------
+// LEER LOS PUNTOS DE LA CURVA
+// ------------------------------------------------------------
+
+function extraerRecorrido(nodo) {
+
+  let datos = null;
+
+  nodo.traverse((objeto) => {
+
+    if (datos) return;
+
+    const geometria = objeto.geometry;
+
+    if (!geometria || !geometria.attributes) return;
+
+    const atributo = geometria.attributes.position;
+
+    if (!atributo) return;
+
+    const indice = geometria.index;
+
+    // Leer un vértice. Si la geometría está indexada hay que
+    // respetar el índice: en las líneas los pares son
+    // consecutivos en el índice, no en el buffer de posiciones.
+    const leerPunto = (i) =>
+      new THREE.Vector3()
+        .fromBufferAttribute(atributo, i)
+        .applyMatrix4(objeto.matrixWorld);
+
+    const cantidad = indice ? indice.count : atributo.count;
+
+    if (cantidad < 2) return;
+
+
+    if (objeto.isLineSegments) {
+
+      // La curva exportada llega como pares de puntos:
+      // hay que reconstruir el orden.
+      const pares = [];
+
+      for (let i = 0; i + 1 < cantidad; i += 2) {
+
+        const a = indice ? indice.getX(i) : i;
+
+        const b = indice ? indice.getX(i + 1) : i + 1;
+
+        pares.push([leerPunto(a), leerPunto(b)]);
+      }
+
+      datos = ordenarSegmentos(pares);
+
+    } else if (objeto.isLineLoop || objeto.isLine || objeto.isPoints) {
+
+      const puntos = [];
+
+      for (let i = 0; i < cantidad; i++) {
+
+        puntos.push(leerPunto(indice ? indice.getX(i) : i));
+      }
+
+      datos = {
+        puntos,
+        cerrada: objeto.isLineLoop
+      };
+
+    } else if (objeto.isMesh) {
+
+      console.warn(
+        '⚠️ La CURVA salió como malla. Para usarla como ' +
+        'recorrido activá en Blender: Include → Data → ' +
+        'Mesh → Loose Edges, y volvé a exportar.'
+      );
+    }
+  });
+
+  return datos;
+}
+
+
+// Reconstruye el orden de una curva exportada como pares
+// de puntos (LineSegments). Detecta si es cerrada.
+function ordenarSegmentos(pares) {
+
+  const coords = new Map();
+
+  const vecinos = new Map();
+
+  const aristas = new Set();
+
+  const clavePunto = (p) =>
+    `${p.x.toFixed(4)}|${p.y.toFixed(4)}|${p.z.toFixed(4)}`;
+
+  const claveArista = (a, b) =>
+    a < b ? `${a}>${b}` : `${b}>${a}`;
+
+
+  for (const [a, b] of pares) {
+
+    const ka = clavePunto(a);
+
+    const kb = clavePunto(b);
+
+    if (ka === kb) continue;
+
+
+    if (!coords.has(ka)) {
+
+      coords.set(ka, a.clone());
+
+      vecinos.set(ka, []);
+    }
+
+    if (!coords.has(kb)) {
+
+      coords.set(kb, b.clone());
+
+      vecinos.set(kb, []);
+    }
+
+
+    const arista = claveArista(ka, kb);
+
+    if (aristas.has(arista)) continue;
+
+    aristas.add(arista);
+
+    vecinos.get(ka).push(kb);
+
+    vecinos.get(kb).push(ka);
+  }
+
+
+  if (!vecinos.size) return null;
+
+
+  // Un extremo suelto = curva abierta
+  let inicio = null;
+
+  for (const [clave, lista] of vecinos) {
+
+    if (lista.length === 1) {
+
+      inicio = clave;
+
+      break;
+    }
+  }
+
+  const cerrada = inicio === null;
+
+  if (inicio === null) inicio = vecinos.keys().next().value;
+
+
+  const usadas = new Set();
+
+  const puntos = [coords.get(inicio).clone()];
+
+  let actual = inicio;
+
+
+  for (;;) {
+
+    let siguiente = null;
+
+    for (const vecino of vecinos.get(actual)) {
+
+      const arista = claveArista(actual, vecino);
+
+      if (usadas.has(arista)) continue;
+
+      usadas.add(arista);
+
+      siguiente = vecino;
+
+      break;
+    }
+
+    if (siguiente === null) break;
+
+    actual = siguiente;
+
+    if (cerrada && actual === inicio) break;
+
+    puntos.push(coords.get(actual).clone());
+  }
+
+
+  if (usadas.size < aristas.size) {
+
+    console.warn(
+      '⚠️ La CURVA tiene varias piezas separadas. ' +
+      'Se usa la primera.'
+    );
+  }
+
+  return { puntos, cerrada };
+}
+
+
+// ------------------------------------------------------------
+// PREPARAR EL RECORRIDO AL CARGAR UN MODELO
+// ------------------------------------------------------------
+
+function prepararRecorrido(nodo, centro) {
+
+  limpiarRecorrido();
+
+  if (!nodo) return;
+
+
+  const datos = extraerRecorrido(nodo);
+
+  if (!datos || datos.puntos.length < 2) {
+
+    console.warn(
+      '⚠️ La CURVA no tiene líneas dentro del .glb. ' +
+      'Exportala con Include → Data → Mesh → Loose Edges.'
+    );
+
+    return;
+  }
+
+
+  const puntos = datos.puntos;
+
+  const segmentos = [];
+
+  let acumulado = 0;
+
+  // Una curva cerrada suma el segmento final → inicial
+  const cantidad =
+    datos.cerrada ? puntos.length : puntos.length - 1;
+
+
+  for (let i = 0; i < cantidad; i++) {
+
+    const a = puntos[i];
+
+    const b = puntos[(i + 1) % puntos.length];
+
+    const largo = a.distanceTo(b);
+
+    if (largo < 1e-6) continue;
+
+    segmentos.push({ a, b, largo, inicio: acumulado });
+
+    acumulado += largo;
+  }
+
+
+  if (!segmentos.length) {
+
+    console.warn('⚠️ La CURVA no tiene longitud utilizable.');
+
+    return;
+  }
+
+
+  recorrido.puntos = puntos;
+
+  recorrido.segmentos = segmentos;
+
+  recorrido.longitud = acumulado;
+
+  recorrido.cerrada = datos.cerrada;
+
+  recorrido.posicion = 0;
+
+  recorrido.centro.copy(centro);
+
+
+  // OrbitControls no debe empujar la cámara fuera del carril:
+  // se amplía el rango permitido si la curva lo necesita.
+  let minima = Infinity;
+
+  let maxima = 0;
+
+  // Ángulo polar de cada punto respecto al centro. La curva
+  // suele estar a la altura de los ojos, por encima del límite
+  // normal de órbita; si no se amplía, OrbitControls sube la
+  // cámara y el carril deja de seguirse con exactitud.
+  let phiMinimo = Infinity;
+
+  let phiMaximo = -Infinity;
+
+  const direccion = new THREE.Vector3();
+
+  puntos.forEach((p) => {
+
+    direccion.copy(p).sub(centro);
+
+    const distancia = direccion.length();
+
+    if (distancia < minima) minima = distancia;
+
+    if (distancia > maxima) maxima = distancia;
+
+    if (distancia < 1e-6) return;
+
+    const phi = Math.acos(
+      THREE.MathUtils.clamp(direccion.y / distancia, -1, 1)
+    );
+
+    if (phi < phiMinimo) phiMinimo = phi;
+
+    if (phi > phiMaximo) phiMaximo = phi;
+  });
+
+  if (isFinite(minima)) {
+
+    controls.minDistance = Math.min(
+      controls.minDistance,
+      Math.max(minima * 0.95, 1e-4)
+    );
+
+    controls.maxDistance = Math.max(
+      controls.maxDistance,
+      maxima * 1.05
+    );
+  }
+
+  if (isFinite(phiMinimo)) {
+
+    controls.minPolarAngle = Math.min(
+      controls.minPolarAngle,
+      phiMinimo
+    );
+
+    controls.maxPolarAngle = Math.max(
+      controls.maxPolarAngle,
+      phiMaximo
+    );
+  }
+
+
+  // El botón central pasa a ser el recorrido del carril
+  controls.mouseButtons.MIDDLE = null;
+
+
+  console.log(
+    `🛤️ Recorrido listo: ${puntos.length} puntos, ` +
+    `${acumulado.toFixed(2)} u, ` +
+    `${datos.cerrada ? 'cerrado' : 'abierto'}`
+  );
+}
+
+
+// ------------------------------------------------------------
+// CÁMARA SOBRE LA CURVA
+// ------------------------------------------------------------
+
+function puntoEnLongitud(distancia) {
+
+  const segmentos = recorrido.segmentos;
+
+  const ultimo = segmentos[segmentos.length - 1];
+
+  if (distancia <= 0) return segmentos[0].a.clone();
+
+  if (distancia >= recorrido.longitud) return ultimo.b.clone();
+
+  for (const segmento of segmentos) {
+
+    if (distancia <= segmento.inicio + segmento.largo) {
+
+      const avance =
+        (distancia - segmento.inicio) / segmento.largo;
+
+      return segmento.a.clone().lerp(segmento.b, avance);
+    }
+  }
+
+  return ultimo.b.clone();
+}
+
+
+// Punto de la curva más cercano a una posición dada
+function longitudMasCercanaA(posicion) {
+
+  let mejor = 0;
+
+  let mejorDistancia = Infinity;
+
+
+  for (const segmento of recorrido.segmentos) {
+
+    const ab = segmento.b.clone().sub(segmento.a);
+
+    const denominador = ab.lengthSq();
+
+    const avance = denominador > 1e-10
+      ? THREE.MathUtils.clamp(
+          posicion.clone().sub(segmento.a).dot(ab) / denominador,
+          0,
+          1
+        )
+      : 0;
+
+    const punto = segmento.a.clone().addScaledVector(ab, avance);
+
+    const distancia = punto.distanceToSquared(posicion);
+
+    if (distancia < mejorDistancia) {
+
+      mejorDistancia = distancia;
+
+      mejor = segmento.inicio + avance * segmento.largo;
+    }
+  }
+
+  return mejor;
+}
+
+
+function aplicarRecorrido(distancia) {
+
+  if (!recorrido.segmentos.length) return;
+
+
+  if (recorrido.cerrada) {
+
+    distancia =
+      ((distancia % recorrido.longitud) + recorrido.longitud) %
+      recorrido.longitud;
+
+  } else {
+
+    distancia = THREE.MathUtils.clamp(
+      distancia,
+      0,
+      recorrido.longitud
+    );
+  }
+
+  recorrido.posicion = distancia;
+
+
+  const punto = puntoEnLongitud(distancia);
+
+  camera.position.copy(punto);
+
+  controls.target.copy(recorrido.centro);
+
+
+  // Mantener la referencia para que un resize no devuelva
+  // la cámara a la vista anterior.
+  focoActual.copy(recorrido.centro);
+
+  dirActual.copy(punto).sub(recorrido.centro).normalize();
+
+  distanciaReferencia = Math.max(
+    punto.distanceTo(recorrido.centro),
+    1e-4
+  );
+
+  vistaLista = true;
+
+  controls.update();
+}
+
+
+function avanzarRecorrido(deltaX) {
+
+  const alto = container.clientHeight || window.innerHeight;
+
+  const distancia = camera.position.distanceTo(controls.target);
+
+  const altoMundo =
+    2 * distancia *
+    Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2);
+
+  const unidadesPorPixel = altoMundo / alto;
+
+  const paso =
+    deltaX * unidadesPorPixel *
+    SENSIBILIDAD_RECORRIDO * DIRECCION_RECORRIDO;
+
+  aplicarRecorrido(recorrido.posicion + paso);
+}
+
+
+function iniciarRecorrido() {
+
+  if (!recorrido.segmentos.length) return false;
+
+
+  animandoCamara = false;
+
+  cancelarTarjeta();
+
+
+  // Arrancar desde el punto del carril más cercano a la
+  // cámara. Se aplica de inmediato para que el primer
+  // desplazamiento ya se mida sobre el carril.
+  recorrido.posicion =
+    longitudMasCercanaA(camera.position);
+
+  aplicarRecorrido(recorrido.posicion);
+
+  return true;
+}
+
+
+function terminarRecorrido() {
+
+  modoRecorrido = null;
+
+  punterosRecorrido.clear();
+
+  // Devolver el control a OrbitControls (órbita, zoom...)
+  controls.enabled = true;
+
+  container.style.cursor = '';
+}
+
+
+// ------------------------------------------------------------
+// GESTOS: botón central (PC) y dos dedos (móvil)
+// ------------------------------------------------------------
+
+function alBajarPuntero(evento) {
+
+  // Botón central del mouse
+  if (evento.button === 1) {
+
+    if (!iniciarRecorrido()) return;
+
+    modoRecorrido = 'raton';
+
+    ultimoXRecorrido = evento.clientX;
+
+    container.style.cursor = 'grabbing';
+
+    evento.preventDefault();
+
+    return;
+  }
+
+
+  // Dos dedos
+  if (evento.pointerType !== 'touch') return;
+
+  punterosRecorrido.set(evento.pointerId, {
+    x: evento.clientX
+  });
+
+  if (punterosRecorrido.size !== 2) return;
+
+
+  if (!iniciarRecorrido()) {
+
+    punterosRecorrido.clear();
+
+    return;
+  }
+
+  modoRecorrido = 'tactil';
+
+  // Mientras dure el gesto de dos dedos, OrbitControls no
+  // debe hacer zoom/pan: los dos dedos son el recorrido.
+  controls.enabled = false;
+
+  const dedos = [...punterosRecorrido.values()];
+
+  ultimoXRecorrido = (dedos[0].x + dedos[1].x) / 2;
+}
+
+
+function alMoverPuntero(evento) {
+
+  if (modoRecorrido === 'raton') {
+
+    // Si soltaron el botón central
+    if (!(evento.buttons & 4)) {
+
+      terminarRecorrido();
+
+      return;
+    }
+
+    const delta = evento.clientX - ultimoXRecorrido;
+
+    ultimoXRecorrido = evento.clientX;
+
+    if (delta) avanzarRecorrido(delta);
+
+    return;
+  }
+
+
+  if (modoRecorrido !== 'tactil') return;
+
+  if (!punterosRecorrido.has(evento.pointerId)) return;
+
+
+  punterosRecorrido.set(evento.pointerId, {
+    x: evento.clientX
+  });
+
+  const dedos = [...punterosRecorrido.values()];
+
+  if (dedos.length < 2) return;
+
+  const x = (dedos[0].x + dedos[1].x) / 2;
+
+  const delta = x - ultimoXRecorrido;
+
+  ultimoXRecorrido = x;
+
+  if (delta) avanzarRecorrido(delta);
+}
+
+
+function alSubirPuntero(evento) {
+
+  if (evento.pointerType === 'touch') {
+
+    punterosRecorrido.delete(evento.pointerId);
+
+    if (punterosRecorrido.size < 2) terminarRecorrido();
+
+    return;
+  }
+
+  if (modoRecorrido === 'raton' && evento.button === 1) {
+
+    terminarRecorrido();
+  }
+}
+
+
+renderer.domElement.addEventListener(
+  'pointerdown',
+  alBajarPuntero
+);
+
+window.addEventListener('pointermove', alMoverPuntero);
+
+window.addEventListener('pointerup', alSubirPuntero);
+
+window.addEventListener('pointercancel', alSubirPuntero);
+
+
+// Evitar el autoscroll del navegador con el botón central
+renderer.domElement.addEventListener('mousedown', (evento) => {
+
+  if (evento.button === 1) evento.preventDefault();
+});
 
 
 // ============================================================
