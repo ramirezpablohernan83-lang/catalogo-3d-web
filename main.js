@@ -371,19 +371,33 @@ function calcularCajaVisible(raiz) {
 }
 
 
-// Lee una Custom Property de Blender exportada en el .glb.
+// Busca una Custom Property sin importar mayúsculas ni el
+// guion bajo que agrega el exporter (info / _info / Info).
+function propiedadDe(objeto, clave) {
+
+  const datos = (objeto && objeto.userData) || {};
+
+  const buscada = clave.toLowerCase();
+
+  for (const nombre of Object.keys(datos)) {
+
+    if (
+      nombre.toLowerCase().replace(/^_/, '') === buscada
+    ) {
+
+      return datos[nombre];
+    }
+  }
+
+  return undefined;
+}
+
+
+// Texto de una Custom Property de Blender exportada en el .glb.
 // Blender la guarda en "extras" y three la expone en userData.
 function leerPropiedadTexto(objeto, clave) {
 
-  if (!objeto) return '';
-
-  const datos = objeto.userData || {};
-
-  let valor = datos[clave];
-
-  if (valor === undefined) valor = datos['_' + clave];
-
-  if (valor === undefined) valor = datos[clave.toUpperCase()];
+  const valor = propiedadDe(objeto, clave);
 
   if (typeof valor === 'string') return valor.trim();
 
@@ -515,6 +529,44 @@ function cargarModelo(pathArchivo) {
           console.log(
             `🎯 TARGET_${numeroTarget} detectado`
           );
+
+
+          // ------------------------------------------------
+          // Ayuda de autoría
+          //
+          // Error típico en Blender: dejar la propiedad con
+          // el nombre "prop" (el que pone New por defecto)
+          // en vez de renombrarla a "info".
+          // ------------------------------------------------
+
+          // three agrega "name" a userData: no cuenta como property
+          const properties =
+            Object.keys(child.userData || {})
+              .filter((clave) => clave !== 'name');
+
+          const infoCruda =
+            propiedadDe(child, 'info');
+
+          if (
+            infoCruda === undefined &&
+            properties.length
+          ) {
+
+            console.warn(
+              `⚠️ TARGET_${numeroTarget}: tiene ` +
+              `[${properties.join(', ')}] pero ninguna ` +
+              'se llama "info". Renombrala en Blender.'
+            );
+
+          } else if (
+            typeof infoCruda === 'number'
+          ) {
+
+            console.warn(
+              `⚠️ TARGET_${numeroTarget}: "info" es ` +
+              'numérica. Cambiala a String en Blender.'
+            );
+          }
         }
 
 
