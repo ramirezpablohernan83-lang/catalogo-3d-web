@@ -221,6 +221,25 @@ function aplicarVistaReferencia() {
 
   if (!vistaLista) return;
 
+
+  // Si la cámara está sobre el carril, un resize del móvil
+  // (barra de direcciones, giro de pantalla) no debe sacarla
+  // de la curva ni reencuadrar hacia otro lado.
+  if (recorrido.segmentos.length) {
+
+    const enCarril = puntoEnLongitud(recorrido.posicion);
+
+    const tolerancia = Math.max(radioActual * 0.02, 1e-3);
+
+    if (camera.position.distanceTo(enCarril) <= tolerancia) {
+
+      aplicarRecorrido(recorrido.posicion);
+
+      return;
+    }
+  }
+
+
   camera.position
     .copy(focoActual)
     .addScaledVector(dirActual, distanciaVista());
@@ -2084,6 +2103,21 @@ function avanzarRecorrido(deltaX) {
 }
 
 
+// Consumir y poner a cero los impulsos pendientes de
+// OrbitControls (restos de órbita/zoom con amortiguamiento),
+// para que no muevan la cámara después de soltar los dedos.
+function limpiarImpulsoControles() {
+
+  const damping = controls.enableDamping;
+
+  controls.enableDamping = false;
+
+  controls.update();
+
+  controls.enableDamping = damping;
+}
+
+
 function iniciarRecorrido() {
 
   if (!recorrido.segmentos.length) return false;
@@ -2092,6 +2126,8 @@ function iniciarRecorrido() {
   animandoCamara = false;
 
   cancelarTarjeta();
+
+  limpiarImpulsoControles();
 
 
   // Arrancar desde el punto del carril más cercano a la
@@ -2222,7 +2258,23 @@ function alSubirPuntero(evento) {
 
     punterosRecorrido.delete(evento.pointerId);
 
-    if (punterosRecorrido.size < 2) terminarRecorrido();
+
+    // El recorrido termina al levantar uno de los dos dedos,
+    // pero OrbitControls no se reactiva hasta que no quede
+    // ningún dedo apoyado: si no, el dedo que queda rota la
+    // cámara y parece que "vuelve" a otro lado.
+    if (modoRecorrido === 'tactil') {
+
+      modoRecorrido = null;
+
+      container.style.cursor = '';
+    }
+
+
+    if (punterosRecorrido.size === 0) {
+
+      controls.enabled = true;
+    }
 
     return;
   }
