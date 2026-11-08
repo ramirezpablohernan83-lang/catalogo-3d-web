@@ -9,7 +9,7 @@
    Service Worker, no por cada GLB o mejora de la app.
    ============================================================ */
 
-const VERSION = 'catalogo-3d-v4.93';
+const VERSION = 'catalogo-3d-v4.94';
 const CACHE_APP = `${VERSION}-app`;
 const CACHE_ASSETS = `${VERSION}-assets`;
 
@@ -136,7 +136,10 @@ self.addEventListener('fetch', (evento) => {
   // automáticamente cuando el dispositivo tiene conexión.
   // ----------------------------------------------------------
 
-  if (EXTENSIONES_ASSETS.test(url.pathname)) {
+  if (
+    EXTENSIONES_ASSETS.test(url.pathname) ||
+    url.pathname === '/modelos.json'
+  ) {
 
     evento.respondWith((async () => {
 

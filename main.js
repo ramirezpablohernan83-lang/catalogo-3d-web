@@ -1365,7 +1365,17 @@ window.seleccionarPuntoDeInteres =
 // ============================================================
 
 window.cambiarModelo =
-  function (nombreModelo) {
+  function (rutaModelo, botonSeleccionado = null) {
+
+    if (
+      typeof rutaModelo !== 'string' ||
+      !rutaModelo.startsWith('/assets/') ||
+      !/\.glb(?:\?.*)?$/i.test(rutaModelo)
+    ) {
+      console.warn('⚠️ Ruta de modelo GLB no válida:', rutaModelo);
+
+      return;
+    }
 
     document
       .querySelectorAll(
@@ -1377,49 +1387,85 @@ window.cambiarModelo =
       );
 
 
-    if (
-      window.event &&
-      window.event.target
-    ) {
-
-      window.event.target.classList.add(
-        'active'
-      );
-
+    if (botonSeleccionado) {
+      botonSeleccionado.classList.add('active');
     }
 
-
-    if (
-      nombreModelo === 'modelo1'
-    ) {
-
-      cargarModelo(
-        '/assets/modelo1.glb'
-      );
-
-    }
-
-    else if (
-      nombreModelo === 'modelo2'
-    ) {
-
-      cargarModelo(
-        '/assets/modelo2.glb'
-      );
-
-    }
-
-    else if (
-      nombreModelo === 'modelo3'
-    ) {
-
-      cargarModelo(
-        '/assets/modelo3.glb'
-      );
-
-    }
+    cargarModelo(rutaModelo);
 
   };
+
+
+// Lee modelos.json, que Vite genera desde los GLB presentes en
+// public/assets, y crea un botón por cada archivo encontrado.
+async function cargarModelosDisponibles() {
+
+  const lista = document.querySelector('.sidebar-nav');
+
+  if (!lista) return;
+
+
+  try {
+
+    const respuesta = await fetch('/modelos.json', {
+      cache: 'no-store'
+    });
+
+    if (!respuesta.ok) {
+      throw new Error(`HTTP ${respuesta.status} al leer modelos.json`);
+    }
+
+    const modelos = await respuesta.json();
+
+    if (!Array.isArray(modelos) || modelos.length === 0) {
+      throw new Error('No se encontraron archivos .glb en /assets.');
+    }
+
+
+    lista.replaceChildren();
+
+    const botonesPorArchivo = new Map();
+
+    for (const modelo of modelos) {
+
+      const boton = document.createElement('button');
+
+      boton.type = 'button';
+
+      boton.className = 'nav-item';
+
+      boton.textContent = modelo.label;
+
+      boton.title = modelo.file;
+
+      boton.addEventListener('click', () => {
+        window.cambiarModelo(modelo.url, boton);
+      });
+
+      lista.appendChild(boton);
+
+      botonesPorArchivo.set(modelo.file.toLowerCase(), boton);
+    }
+
+
+    // Mantener modelo1 como inicio si existe; si no, usar el
+    // primero de la lista ordenada que generó Vite.
+    const modeloInicial =
+      modelos.find((modelo) => modelo.file.toLowerCase() === 'modelo1.glb') ||
+      modelos[0];
+
+    const botonInicial =
+      botonesPorArchivo.get(modeloInicial.file.toLowerCase());
+
+    window.cambiarModelo(modeloInicial.url, botonInicial);
+
+  } catch (error) {
+
+    console.error('⚠️ No se pudo cargar la lista de modelos:', error);
+
+    lista.textContent = 'No se encontraron modelos .glb';
+  }
+}
 
 
 // ============================================================
@@ -2473,12 +2519,10 @@ renderer.domElement.addEventListener('mousedown', (evento) => {
 
 
 // ============================================================
-// 15. CARGAR MODELO INICIAL
+// 15. CARGAR MODELOS DISPONIBLES
 // ============================================================
 
-cargarModelo(
-  '/assets/modelo1.glb'
-);
+cargarModelosDisponibles();
 
 
 // ============================================================
