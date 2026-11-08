@@ -348,6 +348,11 @@ body, html {
 }
 
 /* --- TARJETA DE INFORMACIÓN DEL PUNTO DE INTERÉS --- */
+/*
+  La posición se calcula en main.js para mantener la tarjeta
+  junto al POI. En móvil se centra debajo del punto y se limita
+  al ancho disponible para que no se salga de la pantalla.
+*/
 .ancla-info,
 .tarjeta-info {
   position: fixed;
@@ -381,6 +386,15 @@ body, html {
   box-shadow: 0 12px 30px rgba(0, 0, 0, 0.5);
   text-align: left;
   transition: opacity 0.15s ease;
+}
+
+/* Ancho de la tarjeta en teléfono; cambia 230px para hacerla
+   más ancha/estrecha. El margen lateral evita que toque el borde. */
+@media (max-width: 600px) {
+  .tarjeta-info {
+    width: min(230px, calc(100vw - 24px));
+    max-width: none;
+  }
 }
 
 .tarjeta-info-titulo {

@@ -222,6 +222,11 @@ function aplicarVistaReferencia() {
   if (!vistaLista) return;
 
 
+  // Un resize durante el enganche no debe interrumpir la
+  // interpolación ni reencuadrar la cámara de golpe.
+  if (transicionRecorrido.activa) return;
+
+
   // Si la cámara está sobre el carril, un resize del móvil
   // (barra de direcciones, giro de pantalla) no debe sacarla
   // de la curva ni reencuadrar hacia otro lado.
@@ -1220,6 +1225,13 @@ window.seleccionarPuntoDeInteres =
     }
 
 
+    // Si se elige un POI durante el enganche, la animación del
+    // POI continúa desde la posición visible en ese instante.
+    transicionRecorrido.activa = false;
+
+    controls.enabled = true;
+
+
     // --------------------------------------------------------
     // Ocultar cota anterior
     // --------------------------------------------------------
@@ -1435,6 +1447,14 @@ const UMBRAL_LEJOS = 1.7;
 // Separación de la tarjeta respecto al punto (en píxeles)
 const SEPARACION_TARJETA = 18;
 
+// Separación vertical de la tarjeta bajo el POI en móvil.
+// Aumenta este valor si quieres que quede más alejada del punto.
+const SEPARACION_TARJETA_MOVIL = 14;
+
+// Opacidad máxima de la tarjeta (0 = transparente, 1 = opaca).
+// El fundido por distancia sigue aplicándose sobre este máximo.
+const OPACIDAD_MAXIMA_TARJETA = 0.7;
+
 
 function ocultarTarjeta() {
 
@@ -1502,12 +1522,15 @@ function actualizarTarjeta() {
   const referencia =
     tarjetaActiva.distanciaVista || distancia;
 
-  const opacidad =
+  const opacidadDistancia =
     1 - THREE.MathUtils.smoothstep(
       distancia,
       referencia * UMBRAL_CERCANO,
       referencia * UMBRAL_LEJOS
     );
+
+  const opacidadTarjeta =
+    opacidadDistancia * OPACIDAD_MAXIMA_TARJETA;
 
 
   const fueraDePantalla =
@@ -1516,7 +1539,7 @@ function actualizarTarjeta() {
     y < 0 || y > alto;
 
 
-  if (fueraDePantalla || opacidad < 0.02) {
+  if (fueraDePantalla || opacidadDistancia < 0.02) {
 
     ocultarTarjeta();
 
@@ -1524,38 +1547,74 @@ function actualizarTarjeta() {
   }
 
 
-  // Posición de la tarjeta: a la derecha del punto y, si no
-  // entra en pantalla, se abre hacia la izquierda.
+  // En escritorio, ubicar la tarjeta junto al POI, a la derecha
+  // o izquierda según el espacio disponible.
   const anchoTarjeta = tarjetaInfo.offsetWidth;
 
   const altoTarjeta = tarjetaInfo.offsetHeight;
 
-  const margen = 8;
+  // Margen mínimo entre la tarjeta y el borde de la pantalla.
+  const margen = 12;
 
-  const aLaDerecha =
-    x + SEPARACION_TARJETA + anchoTarjeta <= ancho - margen;
+  // En móviles (hasta 600 px de ancho), centrar la tarjeta bajo
+  // el POI. Si no cabe debajo, colocarla encima para mantenerla
+  // completamente visible.
+  const esMovil = ancho <= 600;
 
-  const xTarjeta = aLaDerecha
-    ? x + SEPARACION_TARJETA
-    : x - SEPARACION_TARJETA - anchoTarjeta;
+  let xTarjeta;
 
-  // Que tampoco se salga por arriba ni por abajo
-  const yTarjeta = THREE.MathUtils.clamp(
-    y - 12,
-    margen,
-    Math.max(margen, alto - altoTarjeta - margen)
-  );
+  let yTarjeta;
+
+  if (esMovil) {
+
+    xTarjeta = THREE.MathUtils.clamp(
+      x - anchoTarjeta / 2,
+      margen,
+      Math.max(margen, ancho - anchoTarjeta - margen)
+    );
+
+    const debajo = y + SEPARACION_TARJETA_MOVIL;
+
+    const cabeDebajo =
+      debajo + altoTarjeta <= alto - margen;
+
+    yTarjeta = cabeDebajo
+      ? debajo
+      : y - altoTarjeta - SEPARACION_TARJETA_MOVIL;
+
+    yTarjeta = THREE.MathUtils.clamp(
+      yTarjeta,
+      margen,
+      Math.max(margen, alto - altoTarjeta - margen)
+    );
+
+  } else {
+
+    const aLaDerecha =
+      x + SEPARACION_TARJETA + anchoTarjeta <= ancho - margen;
+
+    xTarjeta = aLaDerecha
+      ? x + SEPARACION_TARJETA
+      : x - SEPARACION_TARJETA - anchoTarjeta;
+
+    // Alinear aproximadamente con el punto y limitar arriba/abajo.
+    yTarjeta = THREE.MathUtils.clamp(
+      y - 12,
+      margen,
+      Math.max(margen, alto - altoTarjeta - margen)
+    );
+  }
 
   tarjetaInfo.style.transform =
     `translate3d(${xTarjeta}px, ${yTarjeta}px, 0)`;
 
-  tarjetaInfo.style.opacity = opacidad;
+  tarjetaInfo.style.opacity = opacidadTarjeta;
 
 
   anclaInfo.style.transform =
     `translate3d(${x}px, ${y}px, 0)`;
 
-  anclaInfo.style.opacity = opacidad;
+  anclaInfo.style.opacity = opacidadDistancia;
 }
 
 
@@ -1584,6 +1643,21 @@ const recorrido = {
   posicion: 0,
 
   centro: new THREE.Vector3()
+};
+
+// Enganche suave al carril: al empezar el gesto la cámara no
+// salta al punto de la curva, sino que se desliza hasta él.
+const transicionRecorrido = {
+
+  activa: false,
+
+  inicio: 0,
+
+  duracion: 600,
+
+  offset: new THREE.Vector3(),
+
+  targetInicial: new THREE.Vector3()
 };
 
 // Cuánto avanza por píxel arrastrado (1 = natural)
@@ -1615,6 +1689,10 @@ function limpiarRecorrido() {
   recorrido.posicion = 0;
 
   recorrido.centro.set(0, 0, 0);
+
+  transicionRecorrido.activa = false;
+
+  transicionRecorrido.offset.set(0, 0, 0);
 
   // Sin carril, el botón central vuelve a hacer zoom
   controls.mouseButtons.MIDDLE = THREE.MOUSE.DOLLY;
@@ -2059,6 +2137,11 @@ function aplicarRecorrido(distancia) {
   recorrido.posicion = distancia;
 
 
+  // Durante el enganche suave la interpolación la hace el
+  // bucle de animación, no este método.
+  if (transicionRecorrido.activa) return;
+
+
   const punto = puntoEnLongitud(distancia);
 
   camera.position.copy(punto);
@@ -2087,7 +2170,14 @@ function avanzarRecorrido(deltaX) {
 
   const alto = container.clientHeight || window.innerHeight;
 
-  const distancia = camera.position.distanceTo(controls.target);
+  // Usar la distancia del carril (no la de la cámara, que
+  // durante el enganche todavía puede estar lejos).
+  const puntoActual = puntoEnLongitud(recorrido.posicion);
+
+  const distancia = Math.max(
+    puntoActual.distanceTo(recorrido.centro),
+    1e-4
+  );
 
   const altoMundo =
     2 * distancia *
@@ -2105,8 +2195,12 @@ function avanzarRecorrido(deltaX) {
 
 // Consumir y poner a cero los impulsos pendientes de
 // OrbitControls (restos de órbita/zoom con amortiguamiento),
-// para que no muevan la cámara después de soltar los dedos.
+// sin mover la cámara.
 function limpiarImpulsoControles() {
+
+  const posicion = camera.position.clone();
+
+  const objetivo = controls.target.clone();
 
   const damping = controls.enableDamping;
 
@@ -2115,6 +2209,12 @@ function limpiarImpulsoControles() {
   controls.update();
 
   controls.enableDamping = damping;
+
+  camera.position.copy(posicion);
+
+  controls.target.copy(objetivo);
+
+  camera.lookAt(objetivo);
 }
 
 
@@ -2130,13 +2230,23 @@ function iniciarRecorrido() {
   limpiarImpulsoControles();
 
 
-  // Arrancar desde el punto del carril más cercano a la
-  // cámara. Se aplica de inmediato para que el primer
-  // desplazamiento ya se mida sobre el carril.
+  // Punto del carril más cercano a la cámara. En vez de
+  // saltar ahí de golpe, se guarda la diferencia y el bucle
+  // la va reduciendo durante la transición.
   recorrido.posicion =
     longitudMasCercanaA(camera.position);
 
-  aplicarRecorrido(recorrido.posicion);
+  const punto = puntoEnLongitud(recorrido.posicion);
+
+  transicionRecorrido.offset
+    .copy(camera.position)
+    .sub(punto);
+
+  transicionRecorrido.targetInicial.copy(controls.target);
+
+  transicionRecorrido.inicio = performance.now();
+
+  transicionRecorrido.activa = true;
 
   return true;
 }
@@ -2155,6 +2265,59 @@ function terminarRecorrido() {
 }
 
 
+// Enganche suave: la cámara se desliza desde donde estaba
+// hasta el carril, y el objetivo pasa del punto anterior al
+// centro del modelo. Si el usuario arrastra durante la
+// transición, el carril avanza y el deslizamiento continúa sin
+// saltos.
+function actualizarTransicionRecorrido() {
+
+  if (!transicionRecorrido.activa) return;
+
+
+  const progreso = THREE.MathUtils.clamp(
+    (performance.now() - transicionRecorrido.inicio) /
+      transicionRecorrido.duracion,
+    0,
+    1
+  );
+
+
+  // Ease In / Ease Out
+  const suave = progreso < 0.5
+    ? 4 * progreso * progreso * progreso
+    : 1 - Math.pow(-2 * progreso + 2, 3) / 2;
+
+
+  const punto = puntoEnLongitud(recorrido.posicion);
+
+  camera.position
+    .copy(punto)
+    .addScaledVector(
+      transicionRecorrido.offset,
+      1 - suave
+    );
+
+
+  controls.target.lerpVectors(
+    transicionRecorrido.targetInicial,
+    recorrido.centro,
+    suave
+  );
+
+
+  camera.lookAt(controls.target);
+
+
+  if (progreso >= 1) {
+
+    transicionRecorrido.activa = false;
+
+    aplicarRecorrido(recorrido.posicion);
+  }
+}
+
+
 // ------------------------------------------------------------
 // GESTOS: botón central (PC) y dos dedos (móvil)
 // ------------------------------------------------------------
@@ -2167,6 +2330,10 @@ function alBajarPuntero(evento) {
     if (!iniciarRecorrido()) return;
 
     modoRecorrido = 'raton';
+
+    // Evitar que OrbitControls altere la cámara mientras se
+    // desliza al carril o mientras se recorre con el mouse.
+    controls.enabled = false;
 
     ultimoXRecorrido = evento.clientX;
 
@@ -2398,6 +2565,11 @@ function animate() {
   // ----------------------------------------------------------
 
   controls.update();
+
+
+  // El enganche va después de OrbitControls para que ningún
+  // residuo de órbita/zoom desplace la interpolación.
+  actualizarTransicionRecorrido();
 
 
   // ----------------------------------------------------------
