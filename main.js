@@ -2613,10 +2613,36 @@ redimensionar();
 // sin HTTPS el navegador no lo registra y no habrá instalación.
 if ('serviceWorker' in navigator) {
 
+  // Si la página ya estaba controlada y llega un Service Worker
+  // nuevo, recargar una sola vez para mostrar la versión recién
+  // activada. En la primera instalación no hacemos recarga extra.
+  const yaControladaPorServiceWorker =
+    Boolean(navigator.serviceWorker.controller);
+
+  let recargaPorActualizacion = false;
+
+  if (yaControladaPorServiceWorker) {
+
+    navigator.serviceWorker.addEventListener(
+      'controllerchange',
+      () => {
+
+        if (recargaPorActualizacion) return;
+
+        recargaPorActualizacion = true;
+
+        window.location.reload();
+      }
+    );
+  }
+
   window.addEventListener('load', () => {
 
     navigator.serviceWorker
-      .register('/sw.js')
+      .register('/sw.js', {
+        // No reutilizar una copia HTTP guardada del propio SW.
+        updateViaCache: 'none'
+      })
       .then(() => {
         console.log('📦 Service Worker activo.');
       })

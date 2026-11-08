@@ -4,13 +4,12 @@
    Este archivo vive en /public, así que se publica tal cual
    en la raíz del sitio (/sw.js), sin pasar por el build.
 
-   IMPORTANTE: cada vez que cambies archivos de la app o
-   reemplaces un .glb, sube el número de VERSION.
-   Si no, el móvil seguirá mostrando la copia en caché.
+   Los modelos se comprueban en la red y se guardan para uso
+   sin conexión. Solo hay que subir VERSION al cambiar este
+   Service Worker, no por cada GLB o mejora de la app.
    ============================================================ */
 
-const VERSION = 'catalogo-3d-v4.91';
-SS
+const VERSION = 'catalogo-3d-v4.93';
 const CACHE_APP = `${VERSION}-app`;
 const CACHE_ASSETS = `${VERSION}-assets`;
 
@@ -132,30 +131,40 @@ self.addEventListener('fetch', (evento) => {
 
 
   // ----------------------------------------------------------
-  // Modelos y texturas: caché primero
-  // (son pesados y no cambian sin subir VERSION)
+  // Modelos y texturas: red primero, caché como respaldo.
+  // Así un GLB reemplazado con el mismo nombre se actualiza
+  // automáticamente cuando el dispositivo tiene conexión.
   // ----------------------------------------------------------
 
   if (EXTENSIONES_ASSETS.test(url.pathname)) {
 
     evento.respondWith((async () => {
 
-      const enCache = await caches.match(peticion);
+      const cache = await caches.open(CACHE_ASSETS);
 
-      if (enCache) return enCache;
+      try {
 
-      const respuesta = await fetch(peticion);
+        // Revalidar en el servidor para no reutilizar una copia
+        // HTTP vieja del mismo archivo/nombre.
+        const respuesta = await fetch(peticion, {
+          cache: 'no-cache'
+        });
 
-      if (respuesta && respuesta.status === 200) {
+        if (respuesta && respuesta.ok) {
 
-        const copia = respuesta.clone();
+          await cache.put(peticion, respuesta.clone());
+        }
 
-        const cache = await caches.open(CACHE_ASSETS);
+        return respuesta;
 
-        cache.put(peticion, copia);
+      } catch (error) {
+
+        const copiaGuardada = await cache.match(peticion);
+
+        if (copiaGuardada) return copiaGuardada;
+
+        throw error;
       }
-
-      return respuesta;
     })());
 
     return;
