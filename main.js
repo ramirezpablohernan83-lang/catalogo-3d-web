@@ -300,7 +300,20 @@ let modeloActual = null;
 
 let puntosInteres = [];
 
-let cotaActiva = null;
+// Objetos de cota/explicación asociados al POI seleccionado.
+let anotacionesActivas = [];
+
+let contextoAnotacion = null;
+
+// Dar más libertad al orbit: la anotación empieza a desvanecerse
+// a 40° y se oculta por completo al llegar a 65°.
+const ANGULO_ANOTACION_INICIO = 40;
+const ANGULO_ANOTACION_FIN = 65;
+
+// También se desvanece al alejar el zoom: empieza en 1.35×
+// la distancia de la cámara seleccionada y desaparece en 1.75×.
+const DISTANCIA_ANOTACION_INICIO = 1.35;
+const DISTANCIA_ANOTACION_FIN = 1.75;
 
 
 // ============================================================
@@ -443,6 +456,208 @@ function nombreVisibleDeCamara(nombre) {
 }
 
 
+// Prepara una malla de Blender para usarla como cota/rotulado
+// que pueda aparecer y desvanecerse sin alterar otros objetos.
+const mallasAnotacionPreparadas = new WeakSet();
+
+const estadosOpacidadAnotacion = new Map();
+
+let ultimaActualizacionAnotaciones = performance.now();
+
+function prepararObjetoAnotacion(raiz) {
+
+  raiz.traverse((objeto) => {
+
+    if (
+      (!objeto.isMesh && !objeto.isLine && !objeto.isPoints) ||
+      !objeto.material ||
+      mallasAnotacionPreparadas.has(objeto)
+    ) {
+      return;
+    }
+
+
+    const materiales = Array.isArray(objeto.material)
+      ? objeto.material
+      : [objeto.material];
+
+    // Clonar evita que una opacidad afecte a otro rótulo que
+    // comparta el mismo material exportado desde Blender.
+    const copias = materiales.map((material) => material.clone());
+
+    objeto.material = Array.isArray(objeto.material)
+      ? copias
+      : copias[0];
+
+
+    for (const material of copias) {
+
+      material.transparent = true;
+
+      material.depthWrite = false;
+
+      // Prioriza levemente la cara del rótulo para reducir el
+      // parpadeo cuando queda muy cerca de la superficie del modelo.
+      material.polygonOffset = true;
+
+      material.polygonOffsetFactor = -1;
+
+      material.polygonOffsetUnits = -1;
+
+      material.opacity = 0;
+
+      material.needsUpdate = true;
+    }
+
+
+    mallasAnotacionPreparadas.add(objeto);
+  });
+
+
+  raiz.visible = false;
+}
+
+
+function establecerOpacidadAnotacion(raiz, opacidad) {
+
+  const valor = THREE.MathUtils.clamp(opacidad, 0, 1);
+
+  raiz.visible = valor > 0.005;
+
+  raiz.traverse((objeto) => {
+
+    if (
+      (!objeto.isMesh && !objeto.isLine && !objeto.isPoints) ||
+      !objeto.material
+    ) return;
+
+    const materiales = Array.isArray(objeto.material)
+      ? objeto.material
+      : [objeto.material];
+
+    for (const material of materiales) {
+      material.opacity = valor;
+    }
+  });
+}
+
+
+function ocultarAnotacionesActivas() {
+
+  for (const anotacion of anotacionesActivas) {
+
+    const estado = estadosOpacidadAnotacion.get(anotacion);
+
+    if (estado) {
+      estado.destino = 0;
+
+    } else {
+
+      establecerOpacidadAnotacion(anotacion, 0);
+    }
+  }
+
+  anotacionesActivas = [];
+
+  contextoAnotacion = null;
+}
+
+
+function actualizarAnotacionesActivas() {
+
+  const ahora = performance.now();
+
+  const delta = Math.min(
+    Math.max((ahora - ultimaActualizacionAnotaciones) / 1000, 0),
+    0.1
+  );
+
+  ultimaActualizacionAnotaciones = ahora;
+
+
+  let opacidadObjetivo = 0;
+
+  if (contextoAnotacion && anotacionesActivas.length) {
+
+    const direccionActual = camera.position
+      .clone()
+      .sub(contextoAnotacion.objetivo);
+
+    const distanciaActual = direccionActual.length();
+
+    if (distanciaActual > 1e-5) {
+
+      direccionActual.normalize();
+
+
+      // Ángulo total entre la vista seleccionada y la actual:
+      // funciona al orbitar hacia cualquiera de los lados.
+      const coseno = THREE.MathUtils.clamp(
+        direccionActual.dot(contextoAnotacion.direccionInicial),
+        -1,
+        1
+      );
+
+      const angulo = THREE.MathUtils.radToDeg(Math.acos(coseno));
+
+      const opacidadPorAngulo = 1 - THREE.MathUtils.smoothstep(
+        angulo,
+        ANGULO_ANOTACION_INICIO,
+        ANGULO_ANOTACION_FIN
+      );
+
+
+      const opacidadPorDistancia = 1 - THREE.MathUtils.smoothstep(
+        distanciaActual,
+        contextoAnotacion.distanciaReferencia * DISTANCIA_ANOTACION_INICIO,
+        contextoAnotacion.distanciaReferencia * DISTANCIA_ANOTACION_FIN
+      );
+
+      opacidadObjetivo = opacidadPorAngulo * opacidadPorDistancia;
+    }
+  }
+
+
+  // Actualizar el destino de las anotaciones de la cámara actual.
+  for (const anotacion of anotacionesActivas) {
+
+    let estado = estadosOpacidadAnotacion.get(anotacion);
+
+    if (!estado) {
+
+      estado = { actual: 0, destino: 0 };
+
+      estadosOpacidadAnotacion.set(anotacion, estado);
+    }
+
+    estado.destino = opacidadObjetivo;
+  }
+
+
+  // Suavizar tanto la entrada como la salida, incluso al cambiar
+  // de cámara o seleccionar Vista Libre.
+  const mezcla = 1 - Math.exp(-delta * 10);
+
+  for (const [anotacion, estado] of estadosOpacidadAnotacion) {
+
+    estado.actual = THREE.MathUtils.lerp(
+      estado.actual,
+      estado.destino,
+      mezcla
+    );
+
+    establecerOpacidadAnotacion(anotacion, estado.actual);
+
+    if (estado.destino === 0 && estado.actual < 0.005) {
+
+      establecerOpacidadAnotacion(anotacion, 0);
+
+      estadosOpacidadAnotacion.delete(anotacion);
+    }
+  }
+}
+
+
 const loader = new GLTFLoader();
 
 
@@ -464,7 +679,19 @@ function cargarModelo(pathArchivo) {
   // Reiniciar información
   puntosInteres = [];
 
-  cotaActiva = null;
+  ocultarAnotacionesActivas();
+
+  for (const anotacion of estadosOpacidadAnotacion.keys()) {
+    establecerOpacidadAnotacion(anotacion, 0);
+  }
+
+  estadosOpacidadAnotacion.clear();
+
+  anotacionesActivas = [];
+
+  contextoAnotacion = null;
+
+  ultimaActualizacionAnotaciones = performance.now();
 
   animandoCamara = false;
 
@@ -507,6 +734,8 @@ function cargarModelo(pathArchivo) {
       const targetsEncontrados = new Map();
 
       const cotasEncontradas = new Map();
+
+      const anotacionesPorNumero = new Map();
 
 
       // ======================================================
@@ -600,6 +829,35 @@ function cargarModelo(pathArchivo) {
 
 
         // ----------------------------------------------------
+        // ANOTACIONES NUEVAS (SVG/texto convertido a malla)
+        //
+        // Nombres admitidos en Blender:
+        // COTA_01__DIAMETRO, INFO_01__MATERIAL,
+        // ANOTACION_01__DETALLE, etc.
+        // El número debe coincidir con CAM_01 / TARGET_01.
+        // ----------------------------------------------------
+
+        const coincidenciaAnotacion = nombre.match(
+          /^(?:COTA|INFO|ANOTACION)_(\d{2})(?:__.*)?$/
+        );
+
+        if (coincidenciaAnotacion) {
+
+          const numero = coincidenciaAnotacion[1];
+
+          if (!anotacionesPorNumero.has(numero)) {
+            anotacionesPorNumero.set(numero, []);
+          }
+
+          anotacionesPorNumero.get(numero).push(child);
+
+          prepararObjetoAnotacion(child);
+
+          console.log(`📐 Anotación ${nombreOriginal} → CAM_${numero}`);
+        }
+
+
+        // ----------------------------------------------------
         // CURVA DE RECORRIDO
         //
         // CURVA
@@ -657,18 +915,16 @@ function cargarModelo(pathArchivo) {
         // ----------------------------------------------------
 
         if (
-          nombreLower.includes('cota') ||
-          nombreLower.includes('medida')
+          !child.isCamera &&
+          (
+            nombreLower.includes('cota') ||
+            nombreLower.includes('medida')
+          )
         ) {
 
-          if (child.material) {
-
-            child.material.transparent = true;
-
-            child.material.opacity = 0;
-          }
-
-          child.visible = false;
+          // Compatibilidad con el esquema anterior de nombres
+          // COTA_CAM_01 / MEDIDA_CAM_01.
+          prepararObjetoAnotacion(child);
 
 
           const claveLimpia =
@@ -728,10 +984,15 @@ function cargarModelo(pathArchivo) {
       }
 
 
-      // La cámara se adapta al tamaño real del producto
-      camera.near = Math.max(radioModelo / 100, 0.01);
+      // Mantener el plano lejano cerca del tamaño real de la
+      // escena mejora la precisión del depth buffer y reduce
+      // z-fighting/parpadeo entre superficies casi coplanares.
+      camera.near = Math.max(radioModelo * 0.01, 0.01);
 
-      camera.far = radioModelo * 100;
+      camera.far = Math.max(
+        radioModelo * 24,
+        camera.near + 1
+      );
 
       camera.updateProjectionMatrix();
 
@@ -927,6 +1188,16 @@ function cargarModelo(pathArchivo) {
         }
 
 
+        const anotacionesAsociadas = new Set(
+          anotacionesPorNumero.get(numeroCamara) || []
+        );
+
+        // Incluir también la cota asociada con el esquema viejo.
+        if (cotaAsociada) {
+          anotacionesAsociadas.add(cotaAsociada);
+        }
+
+
         // ----------------------------------------------------
         // GUARDAR PUNTO DE INTERÉS
         // ----------------------------------------------------
@@ -940,6 +1211,8 @@ function cargarModelo(pathArchivo) {
           target: puntoEnfoque,
 
           cota: cotaAsociada,
+
+          anotaciones: [...anotacionesAsociadas],
 
           info: infoTarjeta,
 
@@ -980,6 +1253,8 @@ function cargarModelo(pathArchivo) {
           target: boxCenter.clone(),
 
           cota: null,
+
+          anotaciones: [],
 
           info: '',
 
@@ -1232,20 +1507,8 @@ window.seleccionarPuntoDeInteres =
     controls.enabled = true;
 
 
-    // --------------------------------------------------------
-    // Ocultar cota anterior
-    // --------------------------------------------------------
-
-    if (cotaActiva) {
-
-      cotaActiva.visible = false;
-
-      if (cotaActiva.material) {
-        cotaActiva.material.opacity = 0;
-      }
-
-      cotaActiva = null;
-    }
+    // Cambiar de cámara cierra las anotaciones anteriores.
+    ocultarAnotacionesActivas();
 
 
     // --------------------------------------------------------
@@ -1311,6 +1574,38 @@ window.seleccionarPuntoDeInteres =
     );
 
 
+    // Activar las anotaciones asociadas a esta cámara. Empiezan
+    // transparentes y el bucle las muestra al llegar a la vista.
+    anotacionesActivas = p.anotaciones || (
+      p.cota ? [p.cota] : []
+    );
+
+    if (anotacionesActivas.length) {
+
+      const direccionInicial = posAjustada
+        .clone()
+        .sub(p.target)
+        .normalize();
+
+      contextoAnotacion = {
+        objetivo: p.target.clone(),
+        direccionInicial,
+        distanciaReferencia: Math.max(
+          posAjustada.distanceTo(p.target),
+          1e-4
+        )
+      };
+
+      for (const anotacion of anotacionesActivas) {
+        establecerOpacidadAnotacion(anotacion, 0);
+      }
+
+    } else {
+
+      contextoAnotacion = null;
+    }
+
+
     // Mostrar (o no) la tarjeta del punto seleccionado
     mostrarTarjeta(p);
 
@@ -1339,23 +1634,6 @@ window.seleccionarPuntoDeInteres =
 
     animandoCamara = true;
 
-
-    // --------------------------------------------------------
-    // Mostrar cota asociada
-    // --------------------------------------------------------
-
-    if (p.cota) {
-
-      cotaActiva = p.cota;
-
-      cotaActiva.visible = true;
-
-
-      if (cotaActiva.material) {
-        cotaActiva.material.opacity = 1.0;
-      }
-
-    }
 
   };
 
@@ -2614,6 +2892,10 @@ function animate() {
   // El enganche va después de OrbitControls para que ningún
   // residuo de órbita/zoom desplace la interpolación.
   actualizarTransicionRecorrido();
+
+
+  // Fundir las cotas según el giro y la distancia de la cámara.
+  actualizarAnotacionesActivas();
 
 
   // ----------------------------------------------------------
