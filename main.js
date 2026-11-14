@@ -310,10 +310,11 @@ let contextoAnotacion = null;
 const ANGULO_ANOTACION_INICIO = 40;
 const ANGULO_ANOTACION_FIN = 65;
 
-// También se desvanece al alejar el zoom: empieza en 1.35×
-// la distancia de la cámara seleccionada y desaparece en 1.75×.
-const DISTANCIA_ANOTACION_INICIO = 1.35;
-const DISTANCIA_ANOTACION_FIN = 1.75;
+// La cota queda opaca en la distancia inicial; empieza a
+// desvanecerse al alejarse y desaparece al 70 % del umbral
+// anterior (1.75 × 0.70 = 1.225).
+const DISTANCIA_ANOTACION_INICIO = 1.0;
+const DISTANCIA_ANOTACION_FIN = 1.225;
 
 
 // ============================================================
