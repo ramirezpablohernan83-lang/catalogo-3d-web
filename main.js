@@ -1591,8 +1591,11 @@ window.seleccionarPuntoDeInteres =
       contextoAnotacion = {
         objetivo: p.target.clone(),
         direccionInicial,
+        // OrbitControls puede alejar la cámara hasta minDistance.
+        // Usar la distancia ya limitada evita que una cámara muy
+        // cercana oculte su cota apenas se selecciona.
         distanciaReferencia: Math.max(
-          posAjustada.distanceTo(p.target),
+          p.distanciaVista,
           1e-4
         )
       };
